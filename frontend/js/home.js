@@ -1,9 +1,8 @@
 /**
  * home.js
- * Logik für die Hauptseite (index.html)
+ * Logik für die Hauptseite — angepasst an Supabase Schema
  */
 
-// ── Supabase Config (aus config.js) ──────────────────────────────────────────
 const SUPABASE_URL  = CONFIG.SUPABASE_URL;
 const SUPABASE_ANON = CONFIG.SUPABASE_ANON;
 
@@ -11,48 +10,14 @@ const SUPABASE_ANON = CONFIG.SUPABASE_ANON;
 const DEMO_EVENTS = [
   {
     id: 1,
-    event_name: 'Hessle Audio',
-    venue: 'Berghain',
-    date: getDateStr(0),
-    doors_open: '23:00',
-    artists: [
-      { name: 'Pangaea',       set_time: null },
-      { name: 'Ben UFO',       set_time: null },
-      { name: 'Pearson Sound', set_time: null },
-    ]
-  },
-  {
-    id: 2,
-    event_name: 'Tresor Nacht',
-    venue: 'Tresor',
-    date: getDateStr(0),
-    doors_open: '00:00',
-    artists: [
-      { name: 'Phase Fatale', set_time: '02:00 – 04:00' },
-      { name: 'SPFDJ',        set_time: null },
-      { name: 'Rebekah',      set_time: '06:00 – 08:00' },
-    ]
-  },
-  {
-    id: 3,
-    event_name: 'OHM Presents',
-    venue: 'OHM',
-    date: getDateStr(1),
-    doors_open: '23:00',
-    artists: [
-      { name: 'Surgeon',      set_time: null },
-      { name: 'Paula Temple', set_time: null },
-    ]
-  },
-  {
-    id: 4,
-    event_name: 'Vault Sessions',
-    venue: 'Vault 44',
-    date: getDateStr(2),
-    doors_open: '22:00',
-    artists: [
-      { name: 'Lisek',     set_time: null },
-      { name: 'Alignment', set_time: null },
+    event_name: 'Candyflip x Wyldhearts',
+    event_date: getDateStr(0),
+    clubs: { name: 'Lokschuppen' },
+    event_acts: [
+      { act_time: null, sort_order: 1,  acts: { name: 'DATSKO' } },
+      { act_time: null, sort_order: 2,  acts: { name: 'SZG' } },
+      { act_time: null, sort_order: 3,  acts: { name: 'BabaBass3000' } },
+      { act_time: '02:00 - 04:00', sort_order: 4, acts: { name: 'DJ Tallboy' } },
     ]
   }
 ];
@@ -85,8 +50,9 @@ function formatTabLabel(dateStr) {
 function groupByDate(events) {
   const map = {};
   events.forEach(ev => {
-    if (!map[ev.date]) map[ev.date] = [];
-    map[ev.date].push(ev);
+    const key = ev.event_date;
+    if (!map[key]) map[key] = [];
+    map[key].push(ev);
   });
   return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 }
@@ -112,12 +78,18 @@ function renderDateTabs(grouped) {
 }
 
 function renderEventCard(ev) {
-  const hasTime    = ev.artists?.some(a => a.set_time);
-  const artistRows = (ev.artists || []).map(a => `
+  // event_acts nach sort_order sortieren
+  const acts = (ev.event_acts || [])
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  const hasTime    = acts.some(a => a.act_time);
+  const venueName  = ev.clubs?.name ?? '—';
+
+  const artistRows = acts.map(a => `
     <div class="artist-row">
-      <span class="artist-name">${a.name}</span>
-      ${a.set_time
-        ? `<span class="artist-time confirmed">${a.set_time}</span>`
+      <span class="artist-name">${a.acts?.name ?? '?'}</span>
+      ${a.act_time
+        ? `<span class="artist-time confirmed">${a.act_time}</span>`
         : `<span class="time-unknown">TBA</span>`
       }
     </div>
@@ -128,8 +100,7 @@ function renderEventCard(ev) {
       <div class="card-header">
         <div class="event-name">${ev.event_name}</div>
         <div class="event-meta">
-          <span class="venue-tag">${ev.venue}</span>
-          ${ev.doors_open ? `<span class="doors-time">↳ ${ev.doors_open}</span>` : ''}
+          <span class="venue-tag">${venueName}</span>
           <span class="status-badge ${hasTime ? 'confirmed' : 'pending'}">
             <span class="status-dot"></span>
             ${hasTime ? 'Timetable' : 'Lineup'}
@@ -190,12 +161,19 @@ async function loadFromSupabase() {
   const { data, error } = await client
     .from('events')
     .select(`
-      id, event_name, venue, date, doors_open,
-      artists ( name, set_time )
+      id,
+      event_name,
+      event_date,
+      clubs ( name ),
+      event_acts (
+        act_time,
+        sort_order,
+        acts ( name )
+      )
     `)
-    .gte('date', getDateStr(0))
-    .lte('date', getDateStr(14))
-    .order('date');
+    .gte('event_date', getDateStr(0))
+    .lte('event_date', getDateStr(14))
+    .order('event_date');
 
   if (error) throw error;
   return data ?? [];
