@@ -12,6 +12,8 @@ const DEMO_EVENTS = [
     id: 1,
     event_name: 'Candyflip x Wyldhearts',
     event_date: getDateStr(0),
+    time_start: '23:00:00',
+    time_end: '09:00:00',
     clubs: { name: 'Lokschuppen' },
     event_acts: [
       { act_time: null, sort_order: 1,  acts: { name: 'DATSKO', insta_name: '' } },
@@ -27,6 +29,12 @@ function getDateStr(daysOffset = 0) {
   const d = new Date();
   d.setDate(d.getDate() + daysOffset);
   return d.toISOString().split('T')[0];
+}
+
+// "22:11:49" → "22:11"
+function fmtTime(timeStr) {
+  if (!timeStr) return null;
+  return timeStr.slice(0, 5);
 }
 
 function formatDateLabel(dateStr) {
@@ -78,22 +86,31 @@ function renderDateTabs(grouped) {
 }
 
 function renderEventCard(ev) {
-  // event_acts nach sort_order sortieren
-  const acts = (ev.event_acts || [])
-    .sort((a, b) => a.sort_order - b.sort_order);
+  const acts      = (ev.event_acts || []).sort((a, b) => a.sort_order - b.sort_order);
+  const hasTime   = acts.some(a => a.start_time);
+  const venueName = ev.clubs?.name ?? '—';
+  const doorsTime = fmtTime(ev.time_start);
+  const closeTime = fmtTime(ev.time_end);
 
-  const hasTime    = acts.some(a => a.act_time);
-  const venueName  = ev.clubs?.name ?? '—';
+  const artistRows = acts.map(a => {
+    const start = fmtTime(a.start_time);
+    const end   = fmtTime(a.end_time);
+    const timeLabel = start && end
+      ? `${start} – ${end}`
+      : start
+        ? `ab ${start}`
+        : null;
 
-  const artistRows = acts.map(a => `
-    <div class="artist-row">
-      <span class="artist-name">${a.acts?.name ?? '?'}</span>
-      ${a.act_time
-        ? `<span class="artist-time confirmed">${a.act_time}</span>`
-        : `<span class="time-unknown">TBA</span>`
-      }
-    </div>
-  `).join('');
+    return `
+      <div class="artist-row">
+        <span class="artist-name">${a.acts?.name ?? '?'}</span>
+        ${timeLabel
+          ? `<span class="artist-time confirmed">${timeLabel}</span>`
+          : `<span class="time-unknown">TBA</span>`
+        }
+      </div>
+    `;
+  }).join('');
 
   return `
     <div class="event-card">
@@ -101,6 +118,7 @@ function renderEventCard(ev) {
         <div class="event-name">${ev.event_name}</div>
         <div class="event-meta">
           <span class="venue-tag">${venueName}</span>
+          ${doorsTime ? `<span class="doors-time">↳ ${doorsTime}${closeTime ? ' – ' + closeTime : ''}</span>` : ''}
           <span class="status-badge ${hasTime ? 'confirmed' : 'pending'}">
             <span class="status-dot"></span>
             ${hasTime ? 'Timetable' : 'Lineup'}
@@ -164,9 +182,12 @@ async function loadFromSupabase() {
       id,
       event_name,
       event_date,
+      time_start,
+      time_end,
       clubs ( name ),
       event_acts (
-        act_time,
+        start_time,
+        end_time,
         sort_order,
         acts ( name, insta_name )
       )
