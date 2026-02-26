@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: my_project
+Version: 0.1.0
+Summary: Short description
+Requires-Python: >=3.12
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
