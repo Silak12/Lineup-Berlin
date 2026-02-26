@@ -1,16 +1,21 @@
 [project]
-name = "my_project"
+name = "setradar"
 version = "0.1.0"
-description = "Short description"
+description = "Automated DJ timetable aggregator for Berlin clubs"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "google-api-python-client==2.190.0",
+    "google-auth==2.48.0",
+    "openai==2.24.0",
+    "requests==2.32.5",
+]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "black",
-    "ruff",
-    "mypy"
+    "pytest==9.0.2",
+    "black==26.1.0",
+    "ruff==0.15.3",
+    "mypy==1.19.1",
 ]
 
 [build-system]

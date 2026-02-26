@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: setradar
+Version: 0.1.0
+Summary: Automated DJ timetable aggregator for Berlin clubs
+Requires-Python: >=3.12
+Requires-Dist: google-api-python-client==2.190.0
+Requires-Dist: google-auth==2.48.0
+Requires-Dist: openai==2.24.0
+Requires-Dist: requests==2.32.5
+Provides-Extra: dev
+Requires-Dist: pytest==9.0.2; extra == "dev"
+Requires-Dist: black==26.1.0; extra == "dev"
+Requires-Dist: ruff==0.15.3; extra == "dev"
+Requires-Dist: mypy==1.19.1; extra == "dev"

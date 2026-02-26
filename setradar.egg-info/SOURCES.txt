@@ -1,0 +1,8 @@
+README.md
+main.py
+pyproject.toml
+setradar.egg-info/PKG-INFO
+setradar.egg-info/SOURCES.txt
+setradar.egg-info/dependency_links.txt
+setradar.egg-info/requires.txt
+setradar.egg-info/top_level.txt
