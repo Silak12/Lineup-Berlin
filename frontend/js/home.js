@@ -15,10 +15,22 @@ const DEMO_EVENTS = [
     time_end: '09:00:00',
     clubs: { name: 'Lokschuppen' },
     event_acts: [
-      { start_time: '02:00:00', end_time: '03:30:00', sort_order: 1, acts: { name: 'DATSKO' } },
-      { start_time: null,       end_time: null,        sort_order: 2, acts: { name: 'SZG' } },
-      { start_time: null,       end_time: null,        sort_order: 3, acts: { name: 'BabaBass3000' } },
-      { start_time: '23:00:00', end_time: '01:00:00',  sort_order: 4, acts: { name: 'DJ Tallboy' } },
+      { start_time: '02:00:00', end_time: '03:30:00', sort_order: 1, acts: { id: 1, name: 'DATSKO', insta_name: 'datsko_official' } },
+      { start_time: null,       end_time: null,        sort_order: 2, acts: { id: 2, name: 'SZG', insta_name: null } },
+      { start_time: null,       end_time: null,        sort_order: 3, acts: { id: 3, name: 'BabaBass3000', insta_name: 'babybass3k' } },
+      { start_time: '23:00:00', end_time: '01:00:00',  sort_order: 4, acts: { id: 4, name: 'DJ Tallboy', insta_name: 'dj_tallboy' } },
+    ]
+  },
+  {
+    id: 2,
+    event_name: 'Dystopia',
+    event_date: getDateStr(1),
+    time_start: '22:00:00',
+    time_end: '08:00:00',
+    clubs: { name: 'Tresor' },
+    event_acts: [
+      { start_time: '00:00:00', end_time: '02:00:00', sort_order: 1, acts: { id: 1, name: 'DATSKO', insta_name: 'datsko_official' } },
+      { start_time: '02:00:00', end_time: '04:00:00', sort_order: 2, acts: { id: 5, name: 'Alignment', insta_name: 'alignment_music' } },
     ]
   }
 ];
@@ -35,7 +47,6 @@ function fmtTime(t) {
   return t.slice(0, 5);
 }
 
-// Club-Nacht-Logik: alles vor 14:00 = nach Mitternacht = +24h
 function timeToMinutes(t) {
   if (!t) return Infinity;
   const [h, m] = t.split(':').map(Number);
@@ -79,19 +90,16 @@ function groupByDate(events) {
 }
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
-// Gibt Minuten bis Set zurück, oder null wenn nicht relevant
 function getMinutesUntil(startTimeStr, eventDateStr) {
   if (!startTimeStr || !eventDateStr) return null;
   if (eventDateStr !== getDateStr(0)) return null;
-
   const now    = new Date();
   const [h, m] = startTimeStr.slice(0, 5).split(':').map(Number);
   const setTime = new Date();
   setTime.setHours(h, m, 0, 0);
   if (h < 14) setTime.setDate(setTime.getDate() + 1);
-
   const diffMin = Math.round((setTime - now) / 60000);
-  if (diffMin < 0) return null; // bereits vorbei
+  if (diffMin < 0) return null;
   return diffMin;
 }
 
@@ -102,11 +110,9 @@ function fmtCountdown(mins) {
   return `in ${h}:${String(m).padStart(2, '0')}h`;
 }
 
-// Findet die nächsten 3 Acts (über alle Events) die noch kommen
 function getNextActIds(events) {
   const today = getDateStr(0);
   const upcoming = [];
-
   events.forEach(ev => {
     if (ev.event_date !== today) return;
     (ev.event_acts || []).forEach(a => {
@@ -116,9 +122,7 @@ function getNextActIds(events) {
       }
     });
   });
-
   upcoming.sort((a, b) => a.sortKey - b.sortKey);
-  // Gib Set aus event_id + sort_order als eindeutigen Key zurück
   return upcoming.slice(0, 3).map(u => u.key);
 }
 
@@ -141,6 +145,8 @@ function updateStatusBar() {
 let allEvents      = [];
 let activeDateIdx  = 0;
 let supabaseClient = null;
+let searchMode     = false; // true wenn Suchergebnis-Ansicht aktiv
+let searchFilter   = 'all'; // 'all' | 'artist' | 'club'
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function renderDateTabs(grouped) {
@@ -150,7 +156,12 @@ function renderDateTabs(grouped) {
     const btn = document.createElement('button');
     btn.className   = 'date-tab' + (i === activeDateIdx ? ' active' : '');
     btn.textContent = formatTabLabel(dateStr);
-    btn.onclick = () => { activeDateIdx = i; renderAll(); };
+    btn.onclick = () => {
+      activeDateIdx = i;
+      searchMode = false;
+      clearSearch();
+      renderAll();
+    };
     nav.appendChild(btn);
   });
 }
@@ -166,17 +177,16 @@ function renderEventCard(ev, nextActKeys) {
     const start     = fmtTime(a.start_time);
     const end       = fmtTime(a.end_time);
     const timeLabel = start && end ? `${start} – ${end}` : start ? `ab ${start}` : null;
-
-    // Countdown nur für die nächsten 3 acts
-    const actKey   = `${ev.id}_${a.sort_order}`;
-    const isNext   = nextActKeys.includes(actKey);
-    const mins     = isNext ? getMinutesUntil(start, ev.event_date) : null;
+    const actKey    = `${ev.id}_${a.sort_order}`;
+    const isNext    = nextActKeys.includes(actKey);
+    const mins      = isNext ? getMinutesUntil(start, ev.event_date) : null;
     const countdown = mins !== null ? fmtCountdown(mins) : null;
+    const actId     = a.acts?.id ?? null;
 
     return `
       <div class="artist-row ${start ? 'has-time' : ''}">
         <span class="artist-name">
-          ${a.acts?.name ?? '?'}
+          <span class="artist-name-link" ${actId ? `data-act-id="${actId}"` : ''} data-act-name="${a.acts?.name ?? '?'}">${a.acts?.name ?? '?'}</span>
           ${countdown ? `<span class="countdown ${mins < 30 ? 'soon' : ''}">${countdown}</span>` : ''}
         </span>
         ${timeLabel
@@ -209,7 +219,8 @@ function renderEventCard(ev, nextActKeys) {
 }
 
 function renderAll() {
-  const grouped    = groupByDate(allEvents);
+  if (searchMode) return; // Suchansicht bleibt
+  const grouped     = groupByDate(allEvents);
   const nextActKeys = getNextActIds(allEvents);
   renderDateTabs(grouped);
   updateStatusBar();
@@ -240,12 +251,383 @@ function renderAll() {
   `;
 
   const updated = document.getElementById('lastUpdated');
-  if (updated) {
-    updated.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', {
-      hour: '2-digit', minute: '2-digit'
+  if (updated) updated.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+  // Artist-click events delegieren
+  bindArtistClicks();
+}
+
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+function initSearch() {
+  const input   = document.getElementById('searchInput');
+  const results = document.getElementById('searchResults');
+  const clear   = document.getElementById('searchClear');
+  const typeBtns = document.querySelectorAll('.type-btn');
+
+  typeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      typeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      searchFilter = btn.dataset.type;
+      if (input.value.trim().length > 0) doSearch(input.value.trim());
     });
+  });
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clear.classList.toggle('visible', q.length > 0);
+    if (q.length === 0) {
+      results.classList.remove('open');
+      results.innerHTML = '';
+      return;
+    }
+    if (q.length >= 1) doSearch(q);
+  });
+
+  input.addEventListener('focus', () => {
+    if (input.value.trim().length > 0) results.classList.add('open');
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { clearSearch(); input.blur(); }
+  });
+
+  clear.addEventListener('click', () => { clearSearch(); input.focus(); });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrapper')) results.classList.remove('open');
+  });
+}
+
+function clearSearch() {
+  const input   = document.getElementById('searchInput');
+  const results = document.getElementById('searchResults');
+  const clear   = document.getElementById('searchClear');
+  input.value = '';
+  results.classList.remove('open');
+  results.innerHTML = '';
+  clear.classList.remove('visible');
+  if (searchMode) {
+    searchMode = false;
+    renderAll();
   }
 }
+
+function doSearch(q) {
+  const lower   = q.toLowerCase();
+  const results = document.getElementById('searchResults');
+
+  // Alle einzigartigen Acts aus Events
+  const actMap = {};
+  allEvents.forEach(ev => {
+    (ev.event_acts || []).forEach(a => {
+      if (!a.acts) return;
+      const id = a.acts.id ?? a.acts.name;
+      if (!actMap[id]) actMap[id] = { ...a.acts, type: 'artist' };
+    });
+  });
+
+  // Alle Clubs
+  const clubMap = {};
+  allEvents.forEach(ev => {
+    const name = ev.clubs?.name;
+    if (name && !clubMap[name]) clubMap[name] = { name, type: 'club' };
+  });
+
+  const artists = Object.values(actMap).filter(a =>
+    (searchFilter === 'all' || searchFilter === 'artist') &&
+    a.name.toLowerCase().includes(lower)
+  );
+
+  const clubs = Object.values(clubMap).filter(c =>
+    (searchFilter === 'all' || searchFilter === 'club') &&
+    c.name.toLowerCase().includes(lower)
+  );
+
+  const total = artists.length + clubs.length;
+
+  if (total === 0) {
+    results.innerHTML = `<div class="search-no-results">Keine Ergebnisse für "${q}"</div>`;
+    results.classList.add('open');
+    return;
+  }
+
+  let html = '';
+  if (artists.length > 0) {
+    html += `<div class="search-results-header">Artists (${artists.length})</div>`;
+    artists.slice(0, 6).forEach(a => {
+      const upcoming = countUpcomingEvents(a.id ?? a.name, 'artist');
+      html += `
+        <div class="search-result-item" data-search-type="artist" data-id="${a.id ?? ''}" data-name="${a.name}">
+          <span class="result-type-tag artist">DJ</span>
+          <span class="result-name">${highlight(a.name, q)}</span>
+          <span class="result-sub">${upcoming} Event${upcoming !== 1 ? 's' : ''}</span>
+          <span class="result-arrow">→</span>
+        </div>
+      `;
+    });
+  }
+
+  if (clubs.length > 0) {
+    html += `<div class="search-results-header">Clubs (${clubs.length})</div>`;
+    clubs.slice(0, 4).forEach(c => {
+      const upcoming = countUpcomingEvents(c.name, 'club');
+      html += `
+        <div class="search-result-item" data-search-type="club" data-name="${c.name}">
+          <span class="result-type-tag club">CLUB</span>
+          <span class="result-name">${highlight(c.name, q)}</span>
+          <span class="result-sub">${upcoming} Event${upcoming !== 1 ? 's' : ''}</span>
+          <span class="result-arrow">→</span>
+        </div>
+      `;
+    });
+  }
+
+  results.innerHTML = html;
+  results.classList.add('open');
+
+  // Click handlers
+  results.querySelectorAll('.search-result-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const type = item.dataset.searchType;
+      const name = item.dataset.name;
+      const id   = item.dataset.id || null;
+      document.getElementById('searchResults').classList.remove('open');
+      if (type === 'artist') showArtistSearch(id, name);
+      else if (type === 'club') showClubSearch(name);
+    });
+  });
+}
+
+function highlight(text, q) {
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return text;
+  return text.slice(0, idx) + `<mark style="background:rgba(255,32,32,0.3);color:var(--white)">${text.slice(idx, idx + q.length)}</mark>` + text.slice(idx + q.length);
+}
+
+function countUpcomingEvents(idOrName, type) {
+  const today = getDateStr(0);
+  if (type === 'artist') {
+    return allEvents.filter(ev =>
+      ev.event_date >= today &&
+      (ev.event_acts || []).some(a => a.acts && (a.acts.id == idOrName || a.acts.name === idOrName))
+    ).length;
+  } else {
+    return allEvents.filter(ev => ev.event_date >= today && ev.clubs?.name === idOrName).length;
+  }
+}
+
+// Suche: Filtere Events nach Club, zeige in Main
+function showClubSearch(clubName) {
+  const today   = getDateStr(0);
+  const grouped = groupByDate(allEvents.filter(ev =>
+    ev.clubs?.name === clubName && ev.event_date >= today
+  ));
+  searchMode = true;
+  renderSearchResults(`Club: ${clubName}`, grouped);
+}
+
+// Suche: Filtere Events nach Artist
+function showArtistSearch(actId, actName) {
+  const today   = getDateStr(0);
+  const grouped = groupByDate(allEvents.filter(ev =>
+    ev.event_date >= today &&
+    (ev.event_acts || []).some(a => a.acts && (a.acts.id == actId || a.acts.name === actName))
+  ));
+  searchMode = true;
+  renderSearchResults(`Artist: ${actName}`, grouped);
+}
+
+function renderSearchResults(label, grouped) {
+  const nextActKeys = getNextActIds(allEvents);
+
+  const main = document.getElementById('mainContent');
+  if (!grouped.length) {
+    main.innerHTML = `
+      <div class="search-active-banner">
+        <span><strong>${label}</strong> — Keine kommenden Events</span>
+        <button class="search-banner-close" onclick="clearSearch()">✕ Zurück</button>
+      </div>
+      <div class="empty-state"><span>Keine Events gefunden</span></div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="search-active-banner">
+      <span>Ergebnisse für <strong>${label}</strong></span>
+      <button class="search-banner-close" onclick="clearSearch()">✕ Zurück</button>
+    </div>
+  `;
+
+  grouped.forEach(([dateStr, events]) => {
+    const { day, month, weekday } = formatDateLabel(dateStr);
+    html += `
+      <div class="day-section">
+        <div class="day-label">
+          <div>
+            <div class="weekday">${weekday}</div>
+            ${day}.${month}
+          </div>
+        </div>
+        <div class="day-divider"></div>
+        ${events.map(ev => renderEventCard(ev, nextActKeys)).join('')}
+      </div>
+    `;
+  });
+
+  main.innerHTML = html;
+  bindArtistClicks();
+
+  const updated = document.getElementById('lastUpdated');
+  if (updated) updated.textContent = 'Stand: ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+
+// ── Artist Popup ──────────────────────────────────────────────────────────────
+
+function bindArtistClicks() {
+  document.querySelectorAll('.artist-name-link[data-act-id]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const actId   = el.dataset.actId;
+      const actName = el.dataset.actName;
+      openArtistPopup(actId, actName);
+    });
+  });
+}
+
+async function openArtistPopup(actId, actName) {
+  const overlay = document.getElementById('artistOverlay');
+  const content = document.getElementById('modalContent');
+
+  // Direkt öffnen — Content laden wir dann
+  content.innerHTML = `
+    <div class="modal-artist-tag">// ARTIST</div>
+    <div class="modal-artist-name">${actName}</div>
+    <div class="modal-divider"></div>
+    <div style="color:var(--grey);font-size:11px;letter-spacing:0.1em">Loading...</div>
+  `;
+  overlay.setAttribute('aria-hidden', 'false');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Act-Daten laden
+  let instaName = null;
+  let upcomingEvents = [];
+
+  if (supabaseClient && actId) {
+    try {
+      const { data: act } = await supabaseClient
+        .from('acts')
+        .select('id, name, insta_name')
+        .eq('id', actId)
+        .single();
+      if (act) instaName = act.insta_name;
+
+      const today = getDateStr(0);
+      const { data: eventActs } = await supabaseClient
+        .from('event_acts')
+        .select('start_time, end_time, events(id, event_name, event_date, time_start, clubs(name))')
+        .eq('act_id', actId)
+        .gte('events.event_date', today)
+        .order('events.event_date');
+
+      if (eventActs) {
+        upcomingEvents = eventActs
+          .filter(ea => ea.events && ea.events.event_date >= today)
+          .sort((a, b) => a.events.event_date.localeCompare(b.events.event_date))
+          .slice(0, 8);
+      }
+    } catch (err) {
+      console.warn('Artist popup fetch error:', err);
+    }
+  } else {
+    // Demo-Modus: aus allEvents filtern
+    const today = getDateStr(0);
+    allEvents
+      .filter(ev => ev.event_date >= today)
+      .forEach(ev => {
+        const act = (ev.event_acts || []).find(a => a.acts && (a.acts.id == actId || a.acts.name === actName));
+        if (act) {
+          upcomingEvents.push({ start_time: act.start_time, end_time: act.end_time, events: ev });
+          instaName = act.acts.insta_name;
+        }
+      });
+  }
+
+  renderArtistModal(actName, instaName, upcomingEvents);
+}
+
+function renderArtistModal(name, instaName, upcomingEvents) {
+  const content = document.getElementById('modalContent');
+
+  const igHtml = instaName
+    ? `<a class="modal-ig-link" href="https://instagram.com/${instaName}" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+          <circle cx="12" cy="12" r="4"/>
+          <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+        </svg>
+        @${instaName}
+      </a>`
+    : '';
+
+  let eventsHtml = '';
+  if (!upcomingEvents.length) {
+    eventsHtml = `<div class="modal-no-events">Keine kommenden Events gefunden</div>`;
+  } else {
+    eventsHtml = upcomingEvents.map(ea => {
+      const ev   = ea.events ?? ea;
+      const date = ev.event_date;
+      const { day, weekday } = formatDateLabel(date);
+      const start = fmtTime(ea.start_time);
+      const end   = fmtTime(ea.end_time);
+      const slot  = start && end ? `${start}–${end}` : start ? `ab ${start}` : null;
+      return `
+        <div class="modal-event-row">
+          <div class="modal-event-date">
+            <span class="med">${day}</span>
+            <span class="mwday">${weekday}</span>
+          </div>
+          <div class="modal-event-info">
+            <div class="modal-event-name">${ev.event_name}</div>
+            <div class="modal-event-venue">${ev.clubs?.name ?? '—'}</div>
+          </div>
+          ${slot ? `<div class="modal-event-time">${slot}</div>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  content.innerHTML = `
+    <div class="modal-artist-tag">// ARTIST</div>
+    <div class="modal-artist-name">${name}</div>
+    <div class="modal-divider"></div>
+    ${igHtml}
+    <div class="modal-events-label">Kommende Events (${upcomingEvents.length})</div>
+    ${eventsHtml}
+    <div class="modal-scanner"></div>
+  `;
+}
+
+function closeArtistPopup() {
+  const overlay = document.getElementById('artistOverlay');
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+function initArtistPopup() {
+  document.getElementById('artistOverlayBg').addEventListener('click', closeArtistPopup);
+  document.getElementById('modalClose').addEventListener('click', closeArtistPopup);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeArtistPopup();
+  });
+}
+
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 async function loadFromSupabase() {
@@ -254,10 +636,10 @@ async function loadFromSupabase() {
     .select(`
       id, event_name, event_date, time_start, time_end,
       clubs ( name ),
-      event_acts ( start_time, end_time, sort_order, acts ( name ) )
+      event_acts ( start_time, end_time, sort_order, acts ( id, name, insta_name ) )
     `)
     .gte('event_date', getDateStr(0))
-    .lte('event_date', getDateStr(14))
+    .lte('event_date', getDateStr(60))
     .order('event_date');
   if (error) throw error;
   return data ?? [];
@@ -271,7 +653,7 @@ function subscribeRealtime() {
       { event: 'UPDATE', schema: 'public', table: 'event_acts' },
       async (payload) => {
         allEvents = await loadFromSupabase();
-        renderAll();
+        if (!searchMode) renderAll();
         const card = document.querySelector(`[data-event-id="${payload.new.event_id}"]`);
         if (card) {
           card.classList.remove('flash');
@@ -303,7 +685,10 @@ async function init() {
   }
 
   renderAll();
-  setInterval(renderAll, 60 * 1000);
+  initSearch();
+  initArtistPopup();
+
+  setInterval(() => { if (!searchMode) renderAll(); }, 60 * 1000);
   setInterval(updateStatusBar, 30 * 1000);
 }
 

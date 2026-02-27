@@ -5,20 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SETRADAR — Berlin</title>
   <meta name="description" content="Wer spielt wann wo. Berlin Techno Timetables." />
-
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
-
-  <!-- Styles -->
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-
-  <!-- Navbar -->
   <div id="navbar"></div>
 
-  <!-- Status Bar -->
   <div class="status-bar" id="statusBar">
     <div class="status-bar-left">
       <span class="status-live-dot"></span>
@@ -27,10 +20,28 @@
     <div class="status-bar-right">—</div>
   </div>
 
-  <!-- Date Tabs -->
+  <!-- Search -->
+  <div class="search-wrapper">
+    <div class="search-container">
+      <div class="search-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+      </div>
+      <input id="searchInput" class="search-input" type="text"
+        placeholder="ARTIST ODER CLUB SUCHEN..." autocomplete="off" spellcheck="false" />
+      <div class="search-type-toggle">
+        <button class="type-btn active" data-type="all">ALL</button>
+        <button class="type-btn" data-type="artist">ARTIST</button>
+        <button class="type-btn" data-type="club">CLUB</button>
+      </div>
+      <button class="search-clear" id="searchClear" aria-label="Clear">✕</button>
+    </div>
+    <div class="search-results" id="searchResults"></div>
+  </div>
+
   <nav class="date-nav" id="dateNav"></nav>
 
-  <!-- Content -->
   <main id="mainContent">
     <div class="loading-screen">
       <div class="loading-bar"></div>
@@ -38,14 +49,26 @@
     </div>
   </main>
 
-  <!-- Footer -->
   <div id="footer"></div>
 
-  <!-- JS: Reihenfolge wichtig! -->
+  <!-- Artist Popup Overlay -->
+  <div class="artist-overlay" id="artistOverlay" aria-hidden="true">
+    <div class="artist-overlay-bg" id="artistOverlayBg"></div>
+    <div class="artist-modal" id="artistModal" role="dialog" aria-modal="true">
+      <div class="modal-glitch-bar"></div>
+      <button class="modal-close" id="modalClose" aria-label="Schließen">
+        <span>ESC</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+      </button>
+      <div class="modal-content" id="modalContent"></div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/config.js"></script>
   <script src="js/components.js"></script>
   <script src="js/home.js"></script>
-
 </body>
 </html>

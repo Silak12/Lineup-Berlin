@@ -451,3 +451,488 @@ main {
   margin: 0 auto;
   padding: 0 0 calc(var(--footer-height) + 20px);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEARCH + ARTIST POPUP — Additions
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Search Wrapper ──────────────────────────────────────────────────────── */
+.search-wrapper {
+  position: relative;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 10px 16px 0;
+  z-index: 50;
+}
+
+.search-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--grey);
+  background: var(--off-black);
+  height: 40px;
+  transition: border-color 0.2s;
+  position: relative;
+}
+
+.search-container:focus-within {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px var(--red-dim), inset 0 0 12px rgba(255,32,32,0.04);
+}
+
+.search-icon {
+  padding: 0 10px;
+  color: var(--grey-lt);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--white);
+  text-transform: uppercase;
+  height: 100%;
+}
+
+.search-input::placeholder {
+  color: var(--grey);
+  letter-spacing: 0.1em;
+}
+
+.search-type-toggle {
+  display: flex;
+  border-left: 1px solid var(--grey);
+  height: 100%;
+}
+
+.type-btn {
+  background: none;
+  border: none;
+  border-right: 1px solid #222;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--grey);
+  cursor: pointer;
+  padding: 0 10px;
+  height: 100%;
+  transition: color 0.15s, background 0.15s;
+  text-transform: uppercase;
+}
+
+.type-btn:last-child { border-right: none; }
+.type-btn:hover { color: var(--white); background: rgba(255,255,255,0.03); }
+.type-btn.active { color: var(--red); background: rgba(255,32,32,0.06); }
+
+.search-clear {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--grey);
+  color: var(--grey);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 10px;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.search-clear.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.search-clear:hover { color: var(--red); }
+
+/* ── Search Results Dropdown ─────────────────────────────────────────────── */
+.search-results {
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 16px; right: 16px;
+  background: #0e0e0e;
+  border: 1px solid var(--grey);
+  border-top: 1px solid var(--red-dim);
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--grey) transparent;
+  display: none;
+  z-index: 200;
+}
+
+.search-results.open { display: block; }
+
+.search-results-header {
+  padding: 6px 12px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--grey);
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #171717;
+  transition: background 0.1s;
+}
+
+.search-result-item:last-child { border-bottom: none; }
+.search-result-item:hover { background: rgba(255,32,32,0.06); }
+
+.result-type-tag {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+.result-type-tag.artist { color: var(--red); border-color: var(--red-dim); }
+.result-type-tag.club   { color: #4a9eff; border-color: #1a3a5c; }
+
+.result-name {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  flex: 1;
+}
+
+.result-sub {
+  font-size: 9px;
+  color: var(--grey-lt);
+  letter-spacing: 0.06em;
+}
+
+.result-arrow {
+  color: var(--grey);
+  font-size: 10px;
+}
+
+.search-no-results {
+  padding: 16px 12px;
+  font-size: 11px;
+  color: var(--grey);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* Search result event list inside timetable */
+.search-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(255,32,32,0.06);
+  border-bottom: 1px solid var(--red-dim);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--grey-lt);
+  text-transform: uppercase;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-active-banner strong { color: var(--white); }
+.search-banner-close {
+  background: none;
+  border: none;
+  color: var(--grey-lt);
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  font-family: var(--mono);
+  padding: 2px 6px;
+  border: 1px solid var(--grey);
+  transition: color 0.15s, border-color 0.15s;
+}
+.search-banner-close:hover { color: var(--white); border-color: var(--grey-lt); }
+
+
+/* ── Artist Overlay ──────────────────────────────────────────────────────── */
+
+/* Clickable artist name in row */
+.artist-name-link {
+  cursor: pointer;
+  transition: color 0.15s;
+  position: relative;
+}
+
+.artist-name-link::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0; right: 0;
+  height: 1px;
+  background: var(--red);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s ease;
+}
+
+.artist-name-link:hover { color: var(--red); }
+.artist-name-link:hover::after { transform: scaleX(1); }
+
+/* Overlay backdrop */
+.artist-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.artist-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.artist-overlay-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 4, 4, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Modal */
+.artist-modal {
+  position: absolute;
+  bottom: 0;
+  left: 0; right: 0;
+  max-width: 600px;
+  margin: 0 auto;
+  background: var(--off-black);
+  border: 1px solid var(--grey);
+  border-bottom: none;
+  transform: translateY(100%);
+  transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  max-height: 88dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.artist-overlay.open .artist-modal {
+  transform: translateY(0);
+}
+
+/* Red glitch bar top */
+.modal-glitch-bar {
+  height: 3px;
+  background: var(--red);
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-glitch-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 30%;
+  height: 100%;
+  background: rgba(255,255,255,0.5);
+  animation: glitchSweep 2.4s ease-in-out infinite;
+}
+
+@keyframes glitchSweep {
+  0%   { left: -30%; }
+  60%  { left: 110%; }
+  100% { left: 110%; }
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--grey);
+  color: var(--grey-lt);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  padding: 4px 8px;
+  z-index: 2;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.modal-close:hover { color: var(--white); border-color: var(--grey-lt); }
+
+.modal-content {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--grey) transparent;
+  padding: 24px 20px 32px;
+  flex: 1;
+}
+
+/* Artist Header inside modal */
+.modal-artist-tag {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+
+.modal-artist-name {
+  font-family: var(--display);
+  font-size: 52px;
+  line-height: 0.9;
+  letter-spacing: 0.02em;
+  margin-bottom: 16px;
+  word-break: break-word;
+  /* Glitch text effect on open */
+  animation: nameReveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes nameReveal {
+  0%   { opacity: 0; transform: translateY(12px) skewX(-4deg); filter: blur(3px); }
+  60%  { filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) skewX(0); }
+}
+
+.modal-divider {
+  height: 1px;
+  background: linear-gradient(90deg, var(--red) 0%, var(--red-dim) 30%, transparent 100%);
+  margin-bottom: 16px;
+}
+
+.modal-ig-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--grey-lt);
+  text-decoration: none;
+  border: 1px solid var(--grey);
+  padding: 6px 12px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  margin-bottom: 24px;
+}
+
+.modal-ig-link:hover {
+  color: var(--white);
+  border-color: #e1306c;
+  background: rgba(225, 48, 108, 0.06);
+}
+
+.modal-ig-link svg { flex-shrink: 0; }
+
+/* Upcoming events in modal */
+.modal-events-label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--grey);
+  margin-bottom: 10px;
+}
+
+.modal-event-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #1c1c1c;
+  animation: fadeIn 0.4s ease forwards;
+  opacity: 0;
+}
+
+.modal-event-row:last-child { border-bottom: none; }
+
+.modal-event-date {
+  flex-shrink: 0;
+  text-align: center;
+  border: 1px solid var(--grey);
+  padding: 4px 8px;
+  min-width: 44px;
+}
+
+.modal-event-date .med {
+  font-family: var(--display);
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+}
+
+.modal-event-date .mwday {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--grey-lt);
+  text-transform: uppercase;
+}
+
+.modal-event-info { flex: 1; min-width: 0; }
+.modal-event-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-event-venue {
+  font-size: 10px;
+  color: var(--grey-lt);
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.modal-event-time {
+  font-size: 11px;
+  color: var(--red);
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.modal-no-events {
+  font-size: 11px;
+  color: var(--grey);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 12px 0;
+}
+
+/* Staggered fade for event rows */
+.modal-event-row:nth-child(1)  { animation-delay: 0.08s; }
+.modal-event-row:nth-child(2)  { animation-delay: 0.14s; }
+.modal-event-row:nth-child(3)  { animation-delay: 0.20s; }
+.modal-event-row:nth-child(4)  { animation-delay: 0.26s; }
+.modal-event-row:nth-child(5)  { animation-delay: 0.32s; }
+.modal-event-row:nth-child(6)  { animation-delay: 0.38s; }
+
+/* Radar scanner line effect at bottom of modal */
+.modal-scanner {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--red), transparent);
+  animation: scanLine 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes scanLine {
+  0%   { transform: translateY(0); opacity: 1; }
+  50%  { transform: translateY(-60px); opacity: 0.3; }
+  100% { transform: translateY(0); opacity: 1; }
+}
