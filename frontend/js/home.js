@@ -3,7 +3,15 @@
  */
 
 const SUPABASE_URL  = CONFIG.SUPABASE_URL;
-const SUPABASE_ANON = CONFIG.SUPABASE_ANON;
+const SUPABASE_KEY  = CONFIG.SUPABASE_PUBLISHABLE_KEY || CONFIG.SUPABASE_ANON;
+
+function isPlaceholderValue(value) {
+  return !value || /^DEIN(?:E)?_SUPABASE_/i.test(value);
+}
+
+function isLegacyJwtKey(value) {
+  return typeof value === 'string' && value.startsWith('eyJ') && value.split('.').length === 3;
+}
 
 // ── Demo-Daten ────────────────────────────────────────────────────────────────
 const DEMO_EVENTS = [
@@ -667,11 +675,14 @@ function subscribeRealtime() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
-  const isConfigured = SUPABASE_URL !== 'DEINE_SUPABASE_URL';
+  const hasUrl = !isPlaceholderValue(SUPABASE_URL);
+  const hasKey = !isPlaceholderValue(SUPABASE_KEY);
+  const usesLegacyKey = isLegacyJwtKey(SUPABASE_KEY);
+  const isConfigured = hasUrl && hasKey && !usesLegacyKey;
 
   if (isConfigured) {
     const { createClient } = supabase;
-    supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON);
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
     try {
       allEvents = await loadFromSupabase();
       subscribeRealtime();
@@ -680,6 +691,9 @@ async function init() {
       allEvents = DEMO_EVENTS;
     }
   } else {
+    if (usesLegacyKey) {
+      console.warn('Supabase Legacy-Key erkannt. Bitte in frontend/js/config.js einen neuen Publishable Key (sb_publishable_...) setzen.');
+    }
     await new Promise(r => setTimeout(r, 500));
     allEvents = DEMO_EVENTS;
   }

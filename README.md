@@ -10,6 +10,14 @@ Diese Anleitung gilt nur fuer **Windows**.
 
 ## Projekt starten
 
+Fuer das Frontend in `frontend/js/config.js` einen aktuellen Supabase Publishable Key eintragen:
+
+```js
+SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_...'
+```
+
+Die alten JWT-basierten `anon`-Keys (`eyJ...`) werden von Supabase nicht mehr akzeptiert und fuehren sonst zum Fallback auf Demo-Daten.
+
 ### 1. Venv erstellen (PowerShell)
 
 ```powershell
