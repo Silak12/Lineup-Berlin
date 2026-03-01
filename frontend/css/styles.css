@@ -450,6 +450,16 @@ main {
   max-width: 600px;
   margin: 0 auto;
   padding: 0 0 calc(var(--footer-height) + 20px);
+  /* Swipe animation */
+  will-change: transform, opacity;
+  transform-origin: center 30%;
+  backface-visibility: hidden;
+}
+
+/* Swipe: Kein Textselect während drag */
+main.swiping {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

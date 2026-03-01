@@ -528,6 +528,7 @@ async function openArtistPopup(actId, actName) {
 
   if (supabaseClient && actId) {
     try {
+      // Query 1: Act-Info
       const { data: act } = await supabaseClient
         .from('acts')
         .select('id, name, insta_name')
@@ -535,19 +536,34 @@ async function openArtistPopup(actId, actName) {
         .single();
       if (act) instaName = act.insta_name;
 
-      const today = getDateStr(0);
-      // Hinweis: .gte() / .order() auf nested relations funktioniert in PostgREST
-      // nicht zuverlässig → alle event_acts holen und clientseitig filtern/sortieren.
-      const { data: eventActs } = await supabaseClient
+      // Query 2: Welche event_ids hat dieser Act?
+      const { data: eventActRows } = await supabaseClient
         .from('event_acts')
-        .select('start_time, end_time, events(id, event_name, event_date, time_start, clubs(name))')
+        .select('id, start_time, end_time, event_id')
         .eq('act_id', actId);
 
-      if (eventActs) {
-        upcomingEvents = eventActs
-          .filter(ea => ea.events && ea.events.event_date >= today)
-          .sort((a, b) => a.events.event_date.localeCompare(b.events.event_date))
-          .slice(0, 8);
+      if (eventActRows && eventActRows.length > 0) {
+        const today    = getDateStr(0);
+        const eventIds = eventActRows.map(r => r.event_id);
+
+        // Query 3: Events separat holen → kein RLS-Problem beim nested JOIN
+        const { data: eventRows } = await supabaseClient
+          .from('events')
+          .select('id, event_name, event_date, time_start, clubs(name)')
+          .in('id', eventIds)
+          .gte('event_date', today)
+          .order('event_date');
+
+        if (eventRows) {
+          const eventMap = {};
+          eventRows.forEach(ev => { eventMap[ev.id] = ev; });
+
+          upcomingEvents = eventActRows
+            .map(ea => ({ start_time: ea.start_time, end_time: ea.end_time, events: eventMap[ea.event_id] ?? null }))
+            .filter(ea => ea.events)
+            .sort((a, b) => a.events.event_date.localeCompare(b.events.event_date))
+            .slice(0, 8);
+        }
       }
     } catch (err) {
       console.warn('Artist popup fetch error:', err);
@@ -638,48 +654,114 @@ function initArtistPopup() {
 
 // ── Swipe Navigation (Mobile) ─────────────────────────────────────────────────
 function initSwipe() {
-  let touchStartX = null;
-  let touchStartY = null;
+  const THRESHOLD   = 60;   // px bis Seitenwechsel ausgelöst wird
+  const MAX_RESIST  = 80;   // px maximale Auslenkung gegen Rand
+  let   startX = null, startY = null, curX = null;
+  let   swiping = false;
+
+  const main = document.getElementById('mainContent');
+
+  function applyDrag(dx) {
+    const grouped = groupByDate(allEvents);
+    const atStart = activeDateIdx === 0;
+    const atEnd   = activeDateIdx >= grouped.length - 1;
+
+    // Gummiband-Widerstand an den Rändern
+    let clamped = dx;
+    if ((dx > 0 && atStart) || (dx < 0 && atEnd)) {
+      clamped = dx > 0
+        ? Math.min(dx * 0.2, MAX_RESIST)
+        : Math.max(dx * 0.2, -MAX_RESIST);
+    }
+    main.style.transition = 'none';
+    main.style.transform  = `translateX(${clamped}px) rotate(${clamped * 0.015}deg)`;
+    main.style.opacity    = 1 - Math.min(Math.abs(clamped) / 300, 0.25);
+  }
+
+  function resetDrag(animate) {
+    main.style.transition = animate
+      ? 'transform 0.25s cubic-bezier(0.25,1,0.5,1), opacity 0.25s'
+      : 'none';
+    main.style.transform  = '';
+    main.style.opacity    = '';
+  }
+
+  function slideOut(direction, cb) {
+    // direction: -1 = links raus (nächster), +1 = rechts raus (vorheriger)
+    const px = direction * -120;
+    main.style.transition = 'transform 0.18s cubic-bezier(0.4,0,1,1), opacity 0.18s';
+    main.style.transform  = `translateX(${px}%) rotate(${direction * -3}deg)`;
+    main.style.opacity    = '0';
+    setTimeout(cb, 180);
+  }
+
+  function slideIn(direction) {
+    // Neue Seite von der anderen Seite reinkommen lassen
+    const fromPx = direction * 80;
+    main.style.transition = 'none';
+    main.style.transform  = `translateX(${fromPx}%) rotate(${direction * 2}deg)`;
+    main.style.opacity    = '0';
+    // Force reflow, dann animiert reinkommen
+    void main.offsetWidth;
+    main.style.transition = 'transform 0.28s cubic-bezier(0.25,1,0.5,1), opacity 0.2s';
+    main.style.transform  = '';
+    main.style.opacity    = '';
+  }
 
   document.addEventListener('touchstart', e => {
-    // Nicht triggern wenn Popup offen
     if (document.getElementById('artistOverlay').classList.contains('open')) return;
-    touchStartX = e.changedTouches[0].clientX;
-    touchStartY = e.changedTouches[0].clientY;
+    startX  = e.changedTouches[0].clientX;
+    startY  = e.changedTouches[0].clientY;
+    curX    = startX;
+    swiping = false;
   }, { passive: true });
 
-  document.addEventListener('touchend', e => {
-    if (touchStartX === null) return;
+  document.addEventListener('touchmove', e => {
+    if (startX === null) return;
     if (document.getElementById('artistOverlay').classList.contains('open')) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
 
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    const dy = e.changedTouches[0].clientY - touchStartY;
-
-    // Nur horizontale Swipes (dx dominiert) über 50px auswerten
-    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) {
-      touchStartX = null;
-      return;
+    if (!swiping) {
+      // Erst prüfen ob horizontale Bewegung dominiert
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      if (Math.abs(dy) > Math.abs(dx)) { startX = null; return; }
+      swiping = true;
     }
 
-    const grouped = groupByDate(allEvents);
-    if (!grouped.length) return;
-
-    if (dx < 0 && activeDateIdx < grouped.length - 1) {
-      // Links-Swipe → nächster Tag
-      activeDateIdx++;
-      searchMode = false;
-      clearSearch();
-      renderAll();
-    } else if (dx > 0 && activeDateIdx > 0) {
-      // Rechts-Swipe → vorheriger Tag
-      activeDateIdx--;
-      searchMode = false;
-      clearSearch();
-      renderAll();
-    }
-
-    touchStartX = null;
+    curX = e.changedTouches[0].clientX;
+    applyDrag(curX - startX);
   }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (startX === null || !swiping) { startX = null; return; }
+    const dx       = curX - startX;
+    const grouped  = groupByDate(allEvents);
+    const canNext  = activeDateIdx < grouped.length - 1;
+    const canPrev  = activeDateIdx > 0;
+
+    if (dx < -THRESHOLD && canNext) {
+      slideOut(-1, () => {
+        activeDateIdx++;
+        searchMode = false;
+        clearSearch();
+        renderAll();
+        slideIn(1);
+      });
+    } else if (dx > THRESHOLD && canPrev) {
+      slideOut(1, () => {
+        activeDateIdx--;
+        searchMode = false;
+        clearSearch();
+        renderAll();
+        slideIn(-1);
+      });
+    } else {
+      resetDrag(true);
+    }
+
+    startX = null; swiping = false;
+  });
 }
 
 
