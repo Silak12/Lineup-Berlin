@@ -536,12 +536,12 @@ async function openArtistPopup(actId, actName) {
       if (act) instaName = act.insta_name;
 
       const today = getDateStr(0);
+      // Hinweis: .gte() / .order() auf nested relations funktioniert in PostgREST
+      // nicht zuverlässig → alle event_acts holen und clientseitig filtern/sortieren.
       const { data: eventActs } = await supabaseClient
         .from('event_acts')
         .select('start_time, end_time, events(id, event_name, event_date, time_start, clubs(name))')
-        .eq('act_id', actId)
-        .gte('events.event_date', today)
-        .order('events.event_date');
+        .eq('act_id', actId);
 
       if (eventActs) {
         upcomingEvents = eventActs
@@ -636,6 +636,52 @@ function initArtistPopup() {
   });
 }
 
+// ── Swipe Navigation (Mobile) ─────────────────────────────────────────────────
+function initSwipe() {
+  let touchStartX = null;
+  let touchStartY = null;
+
+  document.addEventListener('touchstart', e => {
+    // Nicht triggern wenn Popup offen
+    if (document.getElementById('artistOverlay').classList.contains('open')) return;
+    touchStartX = e.changedTouches[0].clientX;
+    touchStartY = e.changedTouches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (touchStartX === null) return;
+    if (document.getElementById('artistOverlay').classList.contains('open')) return;
+
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+
+    // Nur horizontale Swipes (dx dominiert) über 50px auswerten
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) {
+      touchStartX = null;
+      return;
+    }
+
+    const grouped = groupByDate(allEvents);
+    if (!grouped.length) return;
+
+    if (dx < 0 && activeDateIdx < grouped.length - 1) {
+      // Links-Swipe → nächster Tag
+      activeDateIdx++;
+      searchMode = false;
+      clearSearch();
+      renderAll();
+    } else if (dx > 0 && activeDateIdx > 0) {
+      // Rechts-Swipe → vorheriger Tag
+      activeDateIdx--;
+      searchMode = false;
+      clearSearch();
+      renderAll();
+    }
+
+    touchStartX = null;
+  }, { passive: true });
+}
+
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 async function loadFromSupabase() {
@@ -701,6 +747,7 @@ async function init() {
   renderAll();
   initSearch();
   initArtistPopup();
+  initSwipe();
 
   setInterval(() => { if (!searchMode) renderAll(); }, 60 * 1000);
   setInterval(updateStatusBar, 30 * 1000);
