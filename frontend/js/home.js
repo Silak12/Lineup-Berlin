@@ -157,7 +157,19 @@ let searchMode     = false; // true wenn Suchergebnis-Ansicht aktiv
 let searchFilter   = 'all'; // 'all' | 'artist' | 'club'
 
 // ── Render ────────────────────────────────────────────────────────────────────
-function renderDateTabs(grouped) {
+function syncDateNavToActiveTab({ smooth = true } = {}) {
+  const nav = document.getElementById('dateNav');
+  if (!nav) return;
+
+  const activeTab = nav.querySelector('.date-tab.active');
+  if (!activeTab) return;
+
+  const padLeft = parseFloat(getComputedStyle(nav).paddingLeft) || 0;
+  const targetLeft = Math.max(0, activeTab.offsetLeft - padLeft);
+  nav.scrollTo({ left: targetLeft, behavior: smooth ? 'smooth' : 'auto' });
+}
+
+function renderDateTabs(grouped, { syncToActive = true, smoothSync = true } = {}) {
   const nav = document.getElementById('dateNav');
   nav.innerHTML = '';
   grouped.forEach(([dateStr], i) => {
@@ -172,6 +184,8 @@ function renderDateTabs(grouped) {
     };
     nav.appendChild(btn);
   });
+
+  if (syncToActive) syncDateNavToActiveTab({ smooth: smoothSync });
 }
 
 function renderEventCard(ev, nextActKeys) {
@@ -226,11 +240,21 @@ function renderEventCard(ev, nextActKeys) {
   `;
 }
 
-function renderAll() {
+function renderAll({ preserveDateNavScroll = false } = {}) {
   if (searchMode) return; // Suchansicht bleibt
   const grouped     = groupByDate(allEvents);
   const nextActKeys = getNextActIds(allEvents);
-  renderDateTabs(grouped);
+
+  if (grouped.length) {
+    activeDateIdx = Math.max(0, Math.min(activeDateIdx, grouped.length - 1));
+  } else {
+    activeDateIdx = 0;
+  }
+
+  renderDateTabs(grouped, {
+    syncToActive: !preserveDateNavScroll,
+    smoothSync: !preserveDateNavScroll
+  });
   updateStatusBar();
 
   const main = document.getElementById('mainContent');
@@ -855,7 +879,7 @@ async function init() {
   initArtistPopup();
   initSwipe();
 
-  setInterval(() => { if (!searchMode) renderAll(); }, 60 * 1000);
+  setInterval(() => { if (!searchMode) renderAll({ preserveDateNavScroll: true }); }, 60 * 1000);
   setInterval(updateStatusBar, 30 * 1000);
 }
 
