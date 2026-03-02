@@ -730,6 +730,8 @@ function initSwipe() {
 
   document.addEventListener('touchstart', e => {
     if (document.getElementById('artistOverlay').classList.contains('open')) return;
+    // Date-Nav: scrollbare Leiste, Swipe dort NICHT übernehmen
+    if (e.target.closest('.date-nav')) return;
     startX  = e.changedTouches[0].clientX;
     startY  = e.changedTouches[0].clientY;
     curX    = startX;
