@@ -1500,3 +1500,285 @@ button.venue-tag.active {
     font-size: 36px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PHASE 2: LIVE MODE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --live-panel-topbar: 44px;
+}
+
+/* When live panel is open, push main content up so it's not hidden under panel */
+body.live-mode-active main {
+  padding-bottom: calc(var(--footer-height) + var(--live-panel-topbar) + 24px);
+}
+
+/* ── Live Panel (bottom sheet) ───────────────────────────────────────────── */
+.live-panel {
+  position: fixed;
+  bottom: var(--footer-height);
+  left: 0; right: 0;
+  max-width: 600px;
+  margin: 0 auto;
+  background: #0c0c0c;
+  border: 1px solid var(--red-dim);
+  border-bottom: none;
+  z-index: 95;
+  transform: translateY(calc(100% + 2px));
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.live-panel.open {
+  transform: translateY(0);
+}
+
+/* ── Topbar ──────────────────────────────────────────────────────────────── */
+.live-panel-topbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 14px;
+  height: var(--live-panel-topbar);
+  cursor: pointer;
+  border-bottom: 1px solid #1c1c1c;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.live-panel-topbar:hover { background: rgba(255, 32, 32, 0.03); }
+
+.live-panel-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--red);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.live-panel-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.live-panel-event-name {
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.1;
+}
+
+.live-panel-venue {
+  font-size: 9px;
+  color: var(--grey-lt);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.live-status-chip {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.live-status-queue    { color: var(--green); border-color: var(--green-dim); }
+.live-status-in_club  { color: var(--red);   border-color: var(--red-dim); }
+
+.live-panel-chevron {
+  font-size: 9px;
+  color: var(--grey-lt);
+  flex-shrink: 0;
+  padding-left: 4px;
+}
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+.live-panel-body {
+  overflow-y: auto;
+  max-height: calc(58dvh - var(--live-panel-topbar));
+  scrollbar-width: thin;
+  scrollbar-color: var(--grey) transparent;
+}
+
+.live-section {
+  padding: 10px 14px;
+  border-bottom: 1px solid #181818;
+}
+
+.live-section:last-child { border-bottom: none; }
+
+.live-section-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--grey);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Timetable ───────────────────────────────────────────────────────────── */
+.live-act-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid #141414;
+  font-size: 12px;
+}
+
+.live-act-row:last-child { border-bottom: none; }
+
+.live-act-name { font-weight: 500; }
+.live-act-time { color: var(--grey-lt); font-size: 11px; letter-spacing: 0.04em; }
+
+/* ── Queue Level Buttons ─────────────────────────────────────────────────── */
+.live-level-buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.live-level-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--grey);
+  color: var(--grey-lt);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.live-level-btn.live-level-green { border-color: #1a4a2e; }
+.live-level-btn.live-level-green:hover,
+.live-level-btn.live-level-green.active { background: rgba(61,220,132,0.08); border-color: var(--green); color: var(--green); }
+
+.live-level-btn.live-level-yellow { border-color: #3a2e00; }
+.live-level-btn.live-level-yellow:hover,
+.live-level-btn.live-level-yellow.active { background: rgba(255,214,10,0.07); border-color: #ffd60a; color: #ffd60a; }
+
+.live-level-btn.live-level-red { border-color: var(--red-dim); }
+.live-level-btn.live-level-red:hover,
+.live-level-btn.live-level-red.active { background: rgba(255,32,32,0.08); border-color: var(--red); color: var(--red); }
+
+.live-level-btn.live-level-hell { border-color: #4a2000; }
+.live-level-btn.live-level-hell:hover,
+.live-level-btn.live-level-hell.active { background: rgba(255,96,32,0.08); border-color: #ff6020; color: #ff6020; }
+
+/* Level chip in section label */
+.live-level-chip {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  padding: 1px 6px;
+  border: 1px solid;
+}
+.live-level-chip-green  { color: var(--green);  border-color: var(--green-dim); }
+.live-level-chip-yellow { color: #ffd60a;       border-color: #3a2e00; }
+.live-level-chip-red    { color: var(--red);    border-color: var(--red-dim); }
+.live-level-chip-hell   { color: #ff6020;       border-color: #4a2000; }
+
+.live-no-data {
+  font-size: 8px;
+  color: var(--grey);
+  letter-spacing: 0.08em;
+}
+
+/* ── Queue Graph ─────────────────────────────────────────────────────────── */
+.live-graph {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin-top: 2px;
+  border: 1px solid #1a1a1a;
+}
+
+/* ── Mood Buttons ────────────────────────────────────────────────────────── */
+.live-mood-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.live-mood-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--grey);
+  color: var(--grey-lt);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.live-mood-btn:hover { border-color: var(--grey-lt); color: var(--white); }
+
+.live-mood-pct {
+  font-size: 13px;
+  color: var(--white);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* ── Panel Action Bar ────────────────────────────────────────────────────── */
+.live-panel-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.live-next-btn {
+  color: var(--green);
+  border-color: var(--green-dim);
+}
+
+.live-next-btn:hover {
+  background: rgba(61, 220, 132, 0.06);
+  border-color: var(--green);
+}
+
+.live-leave-btn {
+  margin-left: auto;
+}
+
+.live-leave-btn:hover {
+  color: var(--red);
+  border-color: var(--red-dim);
+}
+
+/* ── Presence Button on Event Card ──────────────────────────────────────── */
+.presence-btn { font-size: 10px; }
+
+.presence-btn.active {
+  color: var(--green);
+  border-color: var(--green-dim);
+  background: rgba(61, 220, 132, 0.05);
+}
+
+.presence-btn.presence-leaving {
+  color: var(--red);
+  border-color: var(--red-dim);
+}

@@ -58,6 +58,11 @@ let activeSearch = null;
 let authMode = AUTH_MODES.LOGIN;
 let demoMode = false;
 let _dataLoaded = false;
+// ── Phase 2: Live Mode state ─────────────────────────────────────────────
+let userPresence = null;          // { user_id, event_id, status } | null
+let liveEventData = { queue: null, buckets: [], mood: null };
+let livePollingId = null;
+let livePanelExpanded = false;
 
 function fmtTime(t) { return t ? String(t).slice(0, 5) : null; }
 function timeToMinutes(t) { if (!t) return Infinity; const [h, m] = t.split(':').map(Number); const mins = h * 60 + m; return mins < 14 * 60 ? mins + 1440 : mins; }
@@ -108,6 +113,7 @@ function clearUserCollections() {
   favoriteEventIds = new Set();
   favoriteClubIds = new Set();
   favoriteActIds = new Set();
+  userPresence = null;
 }
 function favoriteSet(type) {
   if (type === 'event') return favoriteEventIds;
@@ -309,6 +315,10 @@ async function onNavAuthClick() {
   sessionUser = null;
   userProfile = null;
   clearUserCollections();
+  stopLivePolling();
+  hideLivePanel();
+  liveEventData = { queue: null, buckets: [], mood: null };
+  livePanelExpanded = false;
   rerenderView({ preserveDateNavScroll: true });
   supabaseClient.auth.signOut().catch(err => console.warn('Logout error:', err.message || err));
 }
@@ -331,7 +341,14 @@ function subscribeAuthState() {
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     sessionUser = session?.user || null;
     if (sessionUser) await fetchUserProfile();
-    else { userProfile = null; clearUserCollections(); }
+    else {
+      userProfile = null;
+      clearUserCollections();
+      stopLivePolling();
+      hideLivePanel();
+      liveEventData = { queue: null, buckets: [], mood: null };
+      livePanelExpanded = false;
+    }
     if (!_dataLoaded) return;
     await loadUserCollections(allEvents);
     rerenderView({ preserveDateNavScroll: true });
@@ -445,6 +462,7 @@ function renderEventCard(ev, nextActKeys) {
             <span class="spark-icon">&#10022;</span><span>Hype</span><span class="hype-count">${hype.total_hype}</span>
           </button>
         </div>
+        <div class="event-actions-right">${buildPresenceBtn(ev.id)}</div>
       </div>
       <div class="artist-list"><div class="artist-list-label">Artists</div>${artistRows || '<span class="time-tba">Noch keine Infos</span>'}</div>
     </div>
@@ -746,6 +764,9 @@ function bindActionHandlers() {
       const actId = Number(target.dataset.actId);
       await toggleFavorite('act', actId, { rerender: false, onChange: () => syncActFollowButtons(actId) });
     }
+    if (target.dataset.action === 'set-presence') {
+      await setPresenceStatus(Number(target.dataset.eventId), target.dataset.nextStatus);
+    }
   });
   document.getElementById('popularRail')?.addEventListener('click', e => {
     const item = e.target.closest('[data-popular-event-id]');
@@ -769,13 +790,14 @@ async function openArtistPopup(actId, actName) {
   syncBodyLock();
   let instaName = null, upcomingEvents = [];
   if (supabaseClient && actId) {
+    const pubClient = supabaseAnonClient || supabaseClient;
     try {
-      const { data: act } = await supabaseClient.from('acts').select('id, name, insta_name').eq('id', actId).single();
+      const { data: act } = await pubClient.from('acts').select('id, name, insta_name').eq('id', actId).maybeSingle();
       if (act) instaName = act.insta_name;
-      const { data: eventActRows } = await supabaseClient.from('event_acts').select('id, start_time, end_time, event_id').eq('act_id', actId);
+      const { data: eventActRows } = await pubClient.from('event_acts').select('id, start_time, end_time, event_id').eq('act_id', actId);
       if (eventActRows?.length) {
         const eventIds = eventActRows.map(r => r.event_id);
-        const { data: eventRows } = await supabaseClient.from('events').select('id, event_name, event_date, time_start, clubs(id, name)').in('id', eventIds).gte('event_date', getDateStr(0)).order('event_date');
+        const { data: eventRows } = await pubClient.from('events').select('id, event_name, event_date, time_start, clubs(id, name)').in('id', eventIds).gte('event_date', getDateStr(0)).order('event_date');
         if (eventRows) {
           const eventMap = {};
           eventRows.forEach(ev => { eventMap[ev.id] = ev; });
@@ -855,7 +877,7 @@ function initSwipe() {
   const out = (dir, cb) => { main.style.transition = 'transform 0.17s cubic-bezier(0.4,0,1,1), opacity 0.17s'; main.style.transform = `translateX(${dir * -110}%) rotate(${dir * -3}deg)`; main.style.opacity = '0'; setTimeout(cb, 170); };
   const inp = dir => { main.style.transition = 'none'; main.style.transform = `translateX(${dir * 75}%) rotate(${dir * 2}deg)`; main.style.opacity = '0'; void main.offsetWidth; main.style.transition = 'transform 0.28s cubic-bezier(0.25,1,0.5,1), opacity 0.22s'; main.style.transform = ''; main.style.opacity = ''; };
   document.addEventListener('touchstart', e => {
-    if (document.getElementById('artistOverlay')?.classList.contains('open') || document.getElementById('authOverlay')?.classList.contains('open') || e.target.closest('.date-nav') || e.target.closest('.popular-rail')) return;
+    if (document.getElementById('artistOverlay')?.classList.contains('open') || document.getElementById('authOverlay')?.classList.contains('open') || e.target.closest('.date-nav') || e.target.closest('.popular-rail') || e.target.closest('.live-panel')) return;
     startX = e.changedTouches[0].clientX; startY = e.changedTouches[0].clientY; curX = startX; swiping = false;
   }, { passive: true });
   document.addEventListener('touchmove', e => {
@@ -934,6 +956,7 @@ async function loadUserCollections(events = allEvents) {
   } catch (err) {
     console.warn('User hype fetch error:', err.message || err);
   }
+  await loadPresence();
 }
 async function loadFromSupabase() {
   const { data, error } = await (supabaseAnonClient || supabaseClient)
@@ -978,12 +1001,354 @@ function subscribeRealtime() {
     async payload => refreshEventData({ preserveDateNavScroll: true, flashEventId: payload.new.event_id })
   ).subscribe();
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// PHASE 2: LIVE MODE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function getPresenceEventId() {
+  return (userPresence && userPresence.event_id && userPresence.status !== 'left')
+    ? Number(userPresence.event_id) : null;
+}
+
+function stopLivePolling() {
+  if (livePollingId) { clearInterval(livePollingId); livePollingId = null; }
+}
+
+function hideLivePanel() {
+  const panel = document.getElementById('livePanel');
+  if (!panel) return;
+  panel.classList.remove('open');
+  panel.setAttribute('aria-hidden', 'true');
+  panel.innerHTML = '';
+  document.body.classList.remove('live-mode-active');
+}
+
+async function loadPresence() {
+  if (!supabaseClient || !sessionUser) { userPresence = null; return; }
+  try {
+    const { data, error } = await supabaseClient
+      .from('user_event_presence')
+      .select('user_id, event_id, status')
+      .eq('user_id', sessionUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    userPresence = (data && data.event_id && data.status !== 'left') ? data : null;
+  } catch (err) {
+    console.warn('Presence fetch error:', err.message || err);
+    userPresence = null;
+  }
+  if (userPresence) {
+    await fetchLiveData(userPresence.event_id);
+    renderLivePanel();
+    startLivePolling(userPresence.event_id);
+  } else {
+    hideLivePanel();
+    stopLivePolling();
+  }
+}
+
+async function upsertPresence(eventId, status) {
+  if (!supabaseClient || !sessionUser) return false;
+  try {
+    const { error } = await supabaseClient.from('user_event_presence').upsert({
+      user_id: sessionUser.id,
+      event_id: eventId,
+      status,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn('Presence upsert error:', err.message || err);
+    return false;
+  }
+}
+
+async function deletePresence() {
+  if (!supabaseClient || !sessionUser) return;
+  try {
+    await supabaseClient.from('user_event_presence').delete().eq('user_id', sessionUser.id);
+  } catch (err) {
+    console.warn('Presence delete error:', err.message || err);
+  }
+}
+
+async function setPresenceStatus(eventId, nextStatus) {
+  if (!ensureAuthenticated('Live Mode')) return;
+  if (demoMode) { alert('Live Mode braucht eine echte Supabase-Verbindung.'); return; }
+
+  if (nextStatus === 'left' || nextStatus === null) {
+    stopLivePolling();
+    userPresence = null;
+    liveEventData = { queue: null, buckets: [], mood: null };
+    livePanelExpanded = false;
+    hideLivePanel();
+    rerenderView({ preserveDateNavScroll: true });
+    await deletePresence();
+    return;
+  }
+
+  const ok = await upsertPresence(eventId, nextStatus);
+  if (!ok) return;
+  userPresence = { user_id: sessionUser.id, event_id: Number(eventId), status: nextStatus };
+
+  await fetchLiveData(eventId);
+  renderLivePanel();
+  rerenderView({ preserveDateNavScroll: true });
+
+  if (!livePollingId) startLivePolling(eventId);
+}
+
+async function submitQueueReport(eventId, level) {
+  if (!ensureAuthenticated('Queue Report') || !supabaseClient) return;
+  try {
+    await supabaseClient.from('queue_reports').insert({ event_id: eventId, user_id: sessionUser.id, level });
+    await fetchLiveData(eventId);
+    renderLivePanel();
+  } catch (err) {
+    console.warn('Queue report error:', err.message || err);
+  }
+}
+
+async function submitMoodVote(eventId, mood) {
+  if (!ensureAuthenticated('Mood Vote') || !supabaseClient) return;
+  try {
+    await supabaseClient.from('mood_votes').insert({ event_id: eventId, user_id: sessionUser.id, mood });
+    await fetchLiveData(eventId);
+    renderLivePanel();
+  } catch (err) {
+    console.warn('Mood vote error:', err.message || err);
+  }
+}
+
+async function fetchLiveData(eventId) {
+  if (!supabaseClient || !eventId) return;
+  try {
+    const [qRes, bRes, mRes] = await Promise.all([
+      supabaseClient.from('event_queue_current').select('*').eq('event_id', eventId).maybeSingle(),
+      supabaseClient.from('event_queue_buckets').select('*').eq('event_id', eventId).order('bucket_start'),
+      supabaseClient.from('event_mood_current').select('*').eq('event_id', eventId).maybeSingle(),
+    ]);
+    liveEventData = {
+      queue: qRes.data || null,
+      buckets: bRes.data || [],
+      mood: mRes.data || null,
+    };
+  } catch (err) {
+    console.warn('Live data fetch error:', err.message || err);
+  }
+}
+
+function startLivePolling(eventId) {
+  stopLivePolling();
+  if (!eventId) return;
+  livePollingId = setInterval(async () => {
+    await fetchLiveData(eventId);
+    renderLivePanel();
+  }, 15 * 1000);
+}
+
+function renderQueueGraph() {
+  const canvas = document.getElementById('liveQueueGraph');
+  if (!canvas || !canvas.getContext) return;
+  const parent = canvas.parentElement;
+  if (parent && parent.clientWidth > 0) canvas.width = parent.clientWidth;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const buckets = liveEventData.buckets || [];
+
+  ctx.clearRect(0, 0, w, h);
+
+  if (!buckets.length) {
+    ctx.fillStyle = '#333';
+    ctx.font = '9px IBM Plex Mono, monospace';
+    ctx.fillText('keine daten', 8, Math.floor(h / 2) + 3);
+    return;
+  }
+
+  const levelColors = { green: '#3ddc84', yellow: '#ffd60a', red: '#ff2020', hell: '#ff6020' };
+  const padT = 4, padB = 4, graphH = h - padT - padB;
+  const maxBuckets = 24;
+  const barW = Math.max(2, (w / maxBuckets) - 1);
+
+  // grid
+  ctx.strokeStyle = '#1e1e1e';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 3; i++) {
+    const py = padT + graphH - (i / 3) * graphH;
+    ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke();
+  }
+
+  // bars
+  buckets.forEach((b, i) => {
+    const x = (i / maxBuckets) * w;
+    const val = Math.max(0, Math.min(3, b.level_avg || 0));
+    const bh = (val / 3) * graphH;
+    ctx.fillStyle = (levelColors[b.bucket_level] || '#444') + '55';
+    ctx.fillRect(x, padT + graphH - bh, barW, bh);
+  });
+
+  // line
+  if (buckets.length > 1) {
+    ctx.beginPath();
+    ctx.strokeStyle = '#ff2020';
+    ctx.lineWidth = 1.5;
+    buckets.forEach((b, i) => {
+      const x = (i / maxBuckets) * w + barW / 2;
+      const val = Math.max(0, Math.min(3, b.level_avg || 0));
+      const py = padT + graphH - (val / 3) * graphH;
+      if (i === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
+    });
+    ctx.stroke();
+  }
+}
+
+function renderLivePanel() {
+  const panel = document.getElementById('livePanel');
+  if (!panel) return;
+
+  const eventId = getPresenceEventId();
+  if (!eventId || !userPresence) { hideLivePanel(); return; }
+
+  const ev = allEvents.find(e => Number(e.id) === eventId);
+  if (!ev) { hideLivePanel(); return; }
+
+  const status = userPresence.status;
+  const statusLabel = status === 'queue' ? 'Warteschlange' : 'Im Club';
+  const levelLabels = { green: 'Grün', yellow: 'Gelb', red: 'Rot', hell: 'Hell' };
+
+  const qd = liveEventData.queue;
+  const currentLevel = qd?.current_level || null;
+  const md = liveEventData.mood;
+
+  // timetable
+  const acts = sortActs(ev.event_acts || []);
+  const timetableHtml = acts.length
+    ? acts.map(a => {
+        const s = fmtTime(a.start_time), e2 = fmtTime(a.end_time);
+        const t = s && e2 ? `${s}–${e2}` : s ? `ab ${s}` : 'TBA';
+        return `<div class="live-act-row"><span class="live-act-name">${a.acts?.name ?? '?'}</span><span class="live-act-time">${t}</span></div>`;
+      }).join('')
+    : '<span class="time-tba">Keine Acts</span>';
+
+  // queue buttons
+  const queueBtns = ['green', 'yellow', 'red', 'hell'].map(l =>
+    `<button class="live-level-btn live-level-${l}${currentLevel === l ? ' active' : ''}" data-live-action="queue-report" data-level="${l}" data-event-id="${eventId}">${levelLabels[l]}</button>`
+  ).join('');
+
+  // mood buttons
+  const moodMap = { euphoric: 'Euphorisch', stable: 'Stabil', flop: 'Flop' };
+  const moodPct = { euphoric: md?.euphoric_pct || 0, stable: md?.stable_pct || 0, flop: md?.flop_pct || 0 };
+  const moodBtns = ['euphoric', 'stable', 'flop'].map(m =>
+    `<button class="live-mood-btn" data-live-action="mood-vote" data-mood="${m}" data-event-id="${eventId}"><span>${moodMap[m]}</span><span class="live-mood-pct">${moodPct[m]}%</span></button>`
+  ).join('');
+
+  // hype
+  const hype = getHype(ev.id);
+  const isHyped = userHypedEventIds.has(Number(ev.id));
+  const nextStatusBtn = status === 'queue'
+    ? `<button class="event-action-button live-next-btn" data-live-action="next-status" data-event-id="${eventId}">Im Club ↑</button>`
+    : '';
+
+  // level chip
+  const levelChip = currentLevel
+    ? `<span class="live-level-chip live-level-chip-${currentLevel}">${levelLabels[currentLevel]}</span>`
+    : `<span class="live-no-data">keine Meldungen</span>`;
+
+  panel.innerHTML = `
+    <div class="live-panel-topbar" data-live-action="toggle-expand">
+      <span class="live-panel-dot"></span>
+      <div class="live-panel-info">
+        <span class="live-panel-event-name">${ev.event_name}</span>
+        <span class="live-panel-venue">${ev.clubs?.name ?? ''}</span>
+      </div>
+      <span class="live-status-chip live-status-${status}">${statusLabel}</span>
+      <span class="live-panel-chevron">${livePanelExpanded ? '▼' : '▲'}</span>
+    </div>
+    <div class="live-panel-body" style="display:${livePanelExpanded ? 'block' : 'none'}">
+      <div class="live-section">
+        <div class="live-section-label">Timetable</div>
+        <div class="live-timetable">${timetableHtml}</div>
+      </div>
+      <div class="live-section">
+        <div class="live-section-label">Warteschlange ${levelChip}</div>
+        <div class="live-level-buttons">${queueBtns}</div>
+        <canvas id="liveQueueGraph" class="live-graph" height="48"></canvas>
+      </div>
+      <div class="live-section">
+        <div class="live-section-label">Stimmung</div>
+        <div class="live-mood-buttons">${moodBtns}</div>
+      </div>
+      <div class="live-panel-actions">
+        <button class="event-action-button hype-button${isHyped ? ' active' : ''}" data-live-action="hype" data-event-id="${ev.id}">
+          <span class="spark-icon">&#10022;</span><span>Hype</span><span class="hype-count">${hype.total_hype}</span>
+        </button>
+        ${nextStatusBtn}
+        <button class="event-action-button live-leave-btn" data-live-action="leave" data-event-id="${eventId}">Verlassen</button>
+      </div>
+    </div>
+  `;
+
+  panel.setAttribute('aria-hidden', 'false');
+  panel.classList.add('open');
+  document.body.classList.add('live-mode-active');
+
+  if (livePanelExpanded) setTimeout(renderQueueGraph, 10);
+}
+
+function initLivePanel() {
+  const panel = document.getElementById('livePanel');
+  if (!panel) return;
+  panel.addEventListener('click', async e => {
+    const target = e.target.closest('[data-live-action]');
+    if (!target) return;
+    e.stopPropagation();
+    const action = target.dataset.liveAction;
+    const eventId = Number(target.dataset.eventId || getPresenceEventId());
+
+    if (action === 'toggle-expand') {
+      livePanelExpanded = !livePanelExpanded;
+      renderLivePanel();
+      return;
+    }
+    if (action === 'queue-report') { await submitQueueReport(eventId, target.dataset.level); return; }
+    if (action === 'mood-vote')    { await submitMoodVote(eventId, target.dataset.mood);    return; }
+    if (action === 'hype')         { await toggleHype(eventId); renderLivePanel();           return; }
+    if (action === 'next-status') {
+      const next = userPresence?.status === 'queue' ? 'in_club' : null;
+      if (next) await setPresenceStatus(eventId, next);
+      return;
+    }
+    if (action === 'leave') { await setPresenceStatus(eventId, 'left'); return; }
+  });
+}
+
+// ── helper: build presence button HTML for event card ────────────────────
+function buildPresenceBtn(evId) {
+  if (!sessionUser || demoMode) return '';
+  const eventId = Number(evId);
+  const pid = getPresenceEventId();
+  if (!pid) {
+    return `<button class="event-action-button presence-btn" type="button" data-action="set-presence" data-event-id="${eventId}" data-next-status="queue">Warteschlange</button>`;
+  }
+  if (pid === eventId) {
+    if (userPresence?.status === 'queue') {
+      return `<button class="event-action-button presence-btn active" type="button" data-action="set-presence" data-event-id="${eventId}" data-next-status="in_club">Im Club ↑</button>`;
+    }
+    if (userPresence?.status === 'in_club') {
+      return `<button class="event-action-button presence-btn presence-leaving" type="button" data-action="set-presence" data-event-id="${eventId}" data-next-status="left">Verlassen ×</button>`;
+    }
+  }
+  return '';
+}
+
 async function init() {
   if (window.componentsReady?.then) await window.componentsReady;
   initAuthUi();
   initSearch();
   initArtistPopup();
   initSwipe();
+  initLivePanel();
   bindActionHandlers();
   const hasUrl = !isPlaceholderValue(SUPABASE_URL), hasKey = !isPlaceholderValue(SUPABASE_KEY), legacy = isLegacyJwtKey(SUPABASE_KEY), configured = hasUrl && hasKey && !legacy;
   if (configured) {
