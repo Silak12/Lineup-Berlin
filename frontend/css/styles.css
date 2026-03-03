@@ -345,6 +345,14 @@ body::before {
 
 .artist-row:last-child { border-bottom: none; }
 
+.artist-row--followed {
+  background: rgba(140, 60, 255, 0.07);
+  border-left: 2px solid rgba(140, 60, 255, 0.35);
+  padding-left: 6px;
+  margin-left: -8px;
+  padding-right: 0;
+}
+
 .artist-name {
   font-size: 14px;
   font-weight: 500;
@@ -2091,6 +2099,66 @@ a.profile-list-meta:hover { color: var(--white); }
   letter-spacing: 0.06em;
   color: var(--grey-lt);
   line-height: 1.4;
+}
+
+/* ── Profile Top Acts & Recommendations ───────────────────────────────────── */
+.profile-list-item--top-act {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-top-act-rank {
+  font-size: 10px;
+  color: var(--grey);
+  min-width: 16px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.profile-list-item--top-act .profile-list-name {
+  flex: 1;
+}
+
+.profile-top-act-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.profile-top-act-stars {
+  font-size: 11px;
+  color: rgba(140, 60, 255, 0.7);
+  letter-spacing: 1px;
+}
+
+.profile-top-act-avg {
+  font-size: 11px;
+  color: var(--white);
+  font-weight: 500;
+}
+
+.profile-top-act-count {
+  font-size: 10px;
+  color: var(--grey);
+}
+
+.profile-list-item--rec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-list-item--rec .profile-list-name {
+  flex: 1;
+}
+
+.profile-rec-score {
+  font-size: 10px;
+  color: rgba(140, 60, 255, 0.6);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
 /* ── Rating Modal ──────────────────────────────────────────────────────────── */

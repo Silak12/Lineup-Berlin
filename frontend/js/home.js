@@ -456,7 +456,7 @@ function renderEventCard(ev, nextActKeys) {
       ? `<button class="act-rate-btn" type="button" data-action="open-rating" data-act-id="${actId}" data-act-name="${a.acts?.name ?? '?'}" data-event-id="${ev.id}" data-event-name="${ev.event_name}" title="Bewerten">★</button>`
       : '';
     return `
-      <div class="artist-row ${start ? 'has-time' : ''}">
+      <div class="artist-row ${start ? 'has-time' : ''}${isActFavorite ? ' artist-row--followed' : ''}">
         <span class="artist-name">
           <span class="artist-name-link" ${actId ? `data-act-id="${actId}"` : ''} data-act-name="${a.acts?.name ?? '?'}">${a.acts?.name ?? '?'}</span>
           ${actFollowBtn}
@@ -767,6 +767,7 @@ function syncActFollowButtons(actId) {
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-pressed', String(isActive));
     btn.textContent = isActive ? '−' : '+';
+    btn.closest('.artist-row')?.classList.toggle('artist-row--followed', isActive);
   });
   syncActFavoriteButton(actId);
 }

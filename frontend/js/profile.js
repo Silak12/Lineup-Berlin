@@ -124,6 +124,40 @@ function renderActsList(acts) {
   `).join('');
 }
 
+function renderTopActs(topActs) {
+  const el = document.getElementById('topActsList');
+  if (!el) return;
+  if (!topActs.length) { renderEmpty(el, 'Noch keine Acts bewertet.'); return; }
+  el.innerHTML = topActs.map((a, i) => {
+    const stars = '★'.repeat(Math.round(a.avg)) + '☆'.repeat(5 - Math.round(a.avg));
+    const avgStr = a.avg.toFixed(1);
+    return `
+      <div class="profile-list-item profile-list-item--top-act">
+        <span class="profile-top-act-rank">${i + 1}</span>
+        <span class="profile-list-name">${a.name}</span>
+        <span class="profile-top-act-rating">
+          <span class="profile-top-act-stars">${stars}</span>
+          <span class="profile-top-act-avg">${avgStr}</span>
+          ${a.count > 1 ? `<span class="profile-top-act-count">(${a.count}×)</span>` : ''}
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderRecommendations(recs) {
+  const el = document.getElementById('recommendationsList');
+  if (!el) return;
+  if (!recs.length) { renderEmpty(el, 'Keine Empfehlungen verfügbar.'); return; }
+  el.innerHTML = recs.map(a => `
+    <div class="profile-list-item profile-list-item--rec">
+      <span class="profile-list-name">${a.name}</span>
+      ${a.insta_name ? `<a class="profile-list-meta" href="https://instagram.com/${a.insta_name}" target="_blank" rel="noopener">@${a.insta_name}</a>` : ''}
+      <span class="profile-rec-score">${a.score} Match${a.score > 1 ? 'es' : ''}</span>
+    </div>
+  `).join('');
+}
+
 function renderClubsList(clubs) {
   const el = document.getElementById('clubsList');
   if (!el) return;
@@ -262,11 +296,96 @@ async function loadProfile() {
   // 7. Badges (client-side computed)
   const badges = computeBadges({ hyeCount: hyeCount || 0, actCount: actIds.length, clubCount: clubIds.length });
 
+  // 8. Top acts (by user's own average rating)
+  const { data: myRatings = [] } = await supabaseClient
+    .from('act_ratings')
+    .select('act_id, rating, acts(name, insta_name)')
+    .eq('user_id', sessionUser.id);
+
+  const actRatingMap = new Map();
+  (myRatings || []).forEach(r => {
+    if (!r.act_id) return;
+    if (!actRatingMap.has(r.act_id)) {
+      actRatingMap.set(r.act_id, { ratings: [], name: r.acts?.name || '?', insta: r.acts?.insta_name || null });
+    }
+    actRatingMap.get(r.act_id).ratings.push(r.rating);
+  });
+  const topActs = [...actRatingMap.entries()]
+    .map(([id, v]) => ({
+      id,
+      name: v.name,
+      insta_name: v.insta,
+      avg: v.ratings.reduce((a, b) => a + b, 0) / v.ratings.length,
+      count: v.ratings.length,
+    }))
+    .sort((a, b) => b.avg - a.avg || b.count - a.count)
+    .slice(0, 10);
+
+  // 9. Collaborative filtering recommendations
+  let recommendations = [];
+  const myRatedActIds = [...actRatingMap.keys()];
+  if (myRatedActIds.length) {
+    const { data: otherRatings = [] } = await supabaseClient
+      .from('act_ratings')
+      .select('user_id, act_id')
+      .in('act_id', myRatedActIds)
+      .neq('user_id', sessionUser.id);
+
+    // Count how many of the user's rated acts each other user has also rated
+    const similarityMap = new Map();
+    (otherRatings || []).forEach(r => {
+      similarityMap.set(r.user_id, (similarityMap.get(r.user_id) || 0) + 1);
+    });
+
+    const topSimilarUsers = [...similarityMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([uid]) => uid);
+
+    if (topSimilarUsers.length) {
+      let favsQuery = supabaseClient
+        .from('favorites')
+        .select('entity_id')
+        .eq('entity_type', 'act')
+        .in('user_id', topSimilarUsers);
+
+      if (actIds.length) {
+        favsQuery = favsQuery.not('entity_id', 'in', `(${actIds.join(',')})`);
+      }
+      const { data: theirFavs = [] } = await favsQuery;
+
+      const recScoreMap = new Map();
+      (theirFavs || []).forEach(f => {
+        const id = Number(f.entity_id);
+        recScoreMap.set(id, (recScoreMap.get(id) || 0) + 1);
+      });
+
+      const topRecIds = [...recScoreMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([id]) => id);
+
+      if (topRecIds.length) {
+        const { data: recActDetails = [] } = await supabaseClient
+          .from('acts')
+          .select('id, name, insta_name')
+          .in('id', topRecIds);
+
+        recommendations = topRecIds
+          .map(id => recActDetails.find(a => Number(a.id) === id))
+          .filter(Boolean)
+          .map(a => ({ ...a, score: recScoreMap.get(Number(a.id)) }));
+      }
+    }
+  }
+
   // Render all tabs
   renderActsList(acts);
   renderClubsList(clubs);
   renderHypesList(hypedRows || []);
   renderBadges(badges);
+  renderTopActs(topActs);
+  renderRecommendations(recommendations);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
