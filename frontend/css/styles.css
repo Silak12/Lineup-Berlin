@@ -294,7 +294,18 @@ body::before {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
+  cursor: pointer;
+  user-select: none;
 }
+
+.card-chevron {
+  font-size: 10px;
+  color: var(--grey);
+  margin-top: 2px;
+  transition: color 0.15s;
+}
+
+.card-header:hover .card-chevron { color: var(--grey-lt); }
 
 .event-name {
   font-family: var(--display);
@@ -325,7 +336,17 @@ body::before {
 }
 
 /* ── Artist List ─────────────────────────────────────────────────────────── */
-.artist-list { padding: 10px 16px 14px; }
+.artist-list {
+  padding: 0 16px;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease, padding 0.35s ease;
+}
+
+.event-card.open .artist-list {
+  max-height: 2000px;
+  padding: 10px 16px 14px;
+}
 
 .artist-list-label {
   font-size: 9px;
@@ -1583,19 +1604,29 @@ body.live-mode-active main {
   position: fixed;
   bottom: var(--footer-height);
   left: 0; right: 0;
+  top: auto;
   max-width: 600px;
   margin: 0 auto;
   background: #0c0c0c;
-  border: 1px solid var(--red-dim);
+  border: 1px solid rgba(255, 200, 0, 0.28);
   border-bottom: none;
   z-index: 95;
   transform: translateY(calc(100% + 2px));
-  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), top 0.32s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
 .live-panel.open {
   transform: translateY(0);
+}
+
+.live-panel.fullscreen {
+  top: 0;
+  bottom: 0;
+  border-bottom: 1px solid rgba(255, 200, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  z-index: 110;
 }
 
 /* ── Topbar ──────────────────────────────────────────────────────────────── */
@@ -1611,7 +1642,14 @@ body.live-mode-active main {
   transition: background 0.15s;
 }
 
-.live-panel-topbar:hover { background: rgba(255, 32, 32, 0.03); }
+.live-panel-topbar:hover { background: rgba(255, 200, 0, 0.03); }
+
+.live-panel-fullscreen-header {
+  cursor: default;
+  border-bottom: 1px solid rgba(255, 200, 0, 0.15);
+}
+
+.live-panel-fullscreen-header:hover { background: none; }
 
 .live-panel-dot {
   width: 6px;
@@ -1675,6 +1713,29 @@ body.live-mode-active main {
   scrollbar-color: var(--grey) transparent;
 }
 
+.live-panel.fullscreen .live-panel-body {
+  flex: 1;
+  max-height: unset;
+}
+
+.live-close-btn {
+  background: none;
+  border: 1px solid #2a2a2a;
+  color: var(--grey-lt);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 3px 8px 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s;
+  letter-spacing: 0;
+}
+
+.live-close-btn:hover {
+  color: var(--white);
+  border-color: var(--grey-lt);
+}
+
 .live-section {
   padding: 10px 14px;
   border-bottom: 1px solid #181818;
@@ -1698,15 +1759,14 @@ body.live-mode-active main {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  padding: 5px 0;
   border-bottom: 1px solid #141414;
   font-size: 12px;
 }
 
 .live-act-row:last-child { border-bottom: none; }
 
-.live-act-name { font-weight: 500; }
-.live-act-time { color: var(--grey-lt); font-size: 11px; letter-spacing: 0.04em; }
+.live-act-time { color: var(--grey-lt); font-size: 11px; letter-spacing: 0.04em; flex-shrink: 0; }
 
 /* ── Queue Level Buttons ─────────────────────────────────────────────────── */
 .live-level-buttons {
@@ -1767,9 +1827,68 @@ body.live-mode-active main {
 .live-graph {
   display: block;
   width: 100%;
-  height: 48px;
-  margin-top: 2px;
+  height: 90px;
+  margin-top: 6px;
   border: 1px solid #1a1a1a;
+}
+
+/* ── Wartezeit section ───────────────────────────────────────────────────── */
+.live-time-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.live-time-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.live-time-label {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+
+.live-time-input {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 6px;
+  width: 84px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.live-time-input:focus {
+  outline: none;
+  border-color: rgba(255, 200, 0, 0.45);
+}
+
+.live-time-input::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.75);
+  cursor: pointer;
+}
+
+.live-next-btn--inline {
+  margin-top: 10px;
+  width: 100%;
+  justify-content: center;
+}
+
+.live-wait-result {
+  font-size: 11px;
+  color: var(--grey-lt);
+  margin-top: 6px;
+  letter-spacing: 0.04em;
+}
+
+.live-wait-result strong {
+  color: rgba(255, 200, 0, 0.9);
 }
 
 /* ── Mood Buttons ────────────────────────────────────────────────────────── */
@@ -1835,6 +1954,26 @@ body.live-mode-active main {
 
 /* ── Presence Button on Event Card ──────────────────────────────────────── */
 .presence-btn { font-size: 10px; }
+
+.presence-btn.presence-cta {
+  color: rgba(255, 200, 0, 0.85);
+  border-color: rgba(255, 200, 0, 0.30);
+  gap: 6px;
+}
+
+.presence-btn.presence-cta:hover {
+  background: rgba(255, 200, 0, 0.05);
+  border-color: rgba(255, 200, 0, 0.55);
+}
+
+.live-btn-dot {
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 200, 0, 0.9);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
 
 .presence-btn.active {
   color: var(--green);
