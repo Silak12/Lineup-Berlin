@@ -67,6 +67,7 @@ let livePanelExpanded = false;
 let ratingState = null;           // { actId, actName, eventId, eventName } | null
 let selectedRating = 0;
 let userActRatings = new Map();   // key: `${actId}:${eventId}` → rating row
+let eventHighlights = new Map();  // event_id → { bestActId, surpriseActId }
 
 function fmtTime(t) { return t ? String(t).slice(0, 5) : null; }
 function timeToMinutes(t) { if (!t) return Infinity; const [h, m] = t.split(':').map(Number); const mins = h * 60 + m; return mins < 14 * 60 ? mins + 1440 : mins; }
@@ -442,28 +443,39 @@ function renderEventCard(ev, nextActKeys) {
   const venueHtml = ev.clubs?.id
     ? `<span class="venue-name-group"><span class="venue-tag">${venue}</span><button class="club-follow-btn${isClubFavorite ? ' active' : ''}" type="button" data-action="toggle-favorite-club" data-club-id="${ev.clubs.id}" aria-pressed="${isClubFavorite}">${isClubFavorite ? '−' : '+'}</button></span>`
     : `<span class="venue-tag">${venue}</span>`;
+  const hl = eventHighlights.get(Number(ev.id));
   const artistRows = acts.map(a => {
     const start = fmtTime(a.start_time), end = fmtTime(a.end_time), label = start && end ? `${start} - ${end}` : start ? `ab ${start}` : null;
     const actKey = `${ev.id}_${a.sort_order}`;
     const mins = nextActKeys.includes(actKey) ? getMinutesUntil(start, ev.event_date) : null;
     const countdown = mins !== null ? fmtCountdown(mins) : null;
     const actId = a.acts?.id ?? null;
-    const isActFavorite = actId ? favoriteActIds.has(Number(actId)) : false;
+    const numActId = actId ? Number(actId) : null;
+    const isActFavorite = numActId ? favoriteActIds.has(numActId) : false;
+    const isBestAct = numActId && hl?.bestActId === numActId;
+    const isSurprise = numActId && hl?.surpriseActId === numActId;
     const actFollowBtn = actId
       ? `<button class="act-follow-btn${isActFavorite ? ' active' : ''}" type="button" data-action="toggle-favorite-act" data-act-id="${actId}" aria-pressed="${isActFavorite}">${isActFavorite ? '−' : '+'}</button>`
       : '';
     const actRateBtn = actId && sessionUser
       ? `<button class="act-rate-btn" type="button" data-action="open-rating" data-act-id="${actId}" data-act-name="${a.acts?.name ?? '?'}" data-event-id="${ev.id}" data-event-name="${ev.event_name}" title="Bewerten">★</button>`
       : '';
+    const flairs = [
+      isBestAct ? '<span class="act-flair act-flair--best">Bester Act</span>' : '',
+      isSurprise ? '<span class="act-flair act-flair--surprise">Überraschung</span>' : '',
+    ].filter(Boolean).join('');
     return `
       <div class="artist-row ${start ? 'has-time' : ''}${isActFavorite ? ' artist-row--followed' : ''}">
         <span class="artist-name">
           <span class="artist-name-link" ${actId ? `data-act-id="${actId}"` : ''} data-act-name="${a.acts?.name ?? '?'}">${a.acts?.name ?? '?'}</span>
+          ${flairs ? `<span class="artist-flairs">${flairs}</span>` : ''}
+        </span>
+        <span class="artist-row-right">
           ${actFollowBtn}
           ${actRateBtn}
           ${countdown ? `<span class="countdown ${mins < 30 ? 'soon' : ''}">${countdown}</span>` : ''}
+          ${label ? `<span class="artist-time confirmed">${label}</span>` : `<span class="time-tba">TBA</span>`}
         </span>
-        ${label ? `<span class="artist-time confirmed">${label}</span>` : `<span class="time-tba">TBA</span>`}
       </div>
     `;
   }).join('');
@@ -790,7 +802,7 @@ function bindActionHandlers() {
       await setPresenceStatus(Number(target.dataset.eventId), target.dataset.nextStatus);
     }
     if (target.dataset.action === 'open-rating') {
-      openRatingModal({
+      await openRatingModal({
         actId: Number(target.dataset.actId),
         actName: target.dataset.actName,
         eventId: Number(target.dataset.eventId),
@@ -888,10 +900,7 @@ function renderArtistModal(name, instaName, upcomingEvents, actId, pastEvents = 
           <span class="modal-act-avg">${ratingStats.avg_rating}</span>
           <span class="modal-act-count">(${ratingStats.rating_count})</span>
         </div>
-        <div class="modal-act-flags">
-          ${ratingStats.best_act_pct > 0 ? `<span class="modal-act-flag">Bester Act ${ratingStats.best_act_pct}%</span>` : ''}
-          ${ratingStats.surprise_pct > 0 ? `<span class="modal-act-flag modal-act-flag--surprise">Überraschung ${ratingStats.surprise_pct}%</span>` : ''}
-        </div>
+        ${ratingStats.surprise_pct > 0 ? `<div class="modal-act-flags"><span class="modal-act-flag modal-act-flag--surprise">Überraschung des Abends ${ratingStats.surprise_pct}%</span></div>` : ''}
       </div>`;
   }
 
@@ -962,7 +971,7 @@ function initArtistPopup() {
     const rateBtn = e.target.closest('[data-action="open-rating"]');
     if (rateBtn) {
       e.preventDefault();
-      openRatingModal({
+      await openRatingModal({
         actId: Number(rateBtn.dataset.actId),
         actName: rateBtn.dataset.actName,
         eventId: Number(rateBtn.dataset.eventId),
@@ -1038,6 +1047,28 @@ async function loadPublicHypes(events = allEvents) {
   }
   hypeTotalsByEventId = nextMap;
 }
+async function loadEventHighlights(events = allEvents) {
+  const ids = visibleEventIds(events);
+  const pubClient = supabaseAnonClient || supabaseClient;
+  if (!pubClient || !ids.length) { eventHighlights = new Map(); return; }
+  try {
+    const { data, error } = await pubClient
+      .from('event_act_highlights')
+      .select('event_id, best_act_id, surprise_act_id')
+      .in('event_id', ids);
+    if (error) throw error;
+    eventHighlights = new Map();
+    (data || []).forEach(row => {
+      eventHighlights.set(Number(row.event_id), {
+        bestActId: row.best_act_id ? Number(row.best_act_id) : null,
+        surpriseActId: row.surprise_act_id ? Number(row.surprise_act_id) : null,
+      });
+    });
+  } catch (err) {
+    console.warn('Highlights fetch error:', err.message || err);
+    eventHighlights = new Map();
+  }
+}
 async function loadUserCollections(events = allEvents) {
   clearUserCollections();
   if (!supabaseClient || !sessionUser) return;
@@ -1095,7 +1126,7 @@ async function refreshEventData({ preserveDateNavScroll = false, flashEventId = 
     demoMode = true;
   }
   if (demoMode) loadDemoHypes();
-  else await loadPublicHypes(allEvents);
+  else { await loadPublicHypes(allEvents); await loadEventHighlights(allEvents); }
   await loadUserCollections(allEvents);
   rerenderView({ preserveDateNavScroll });
   _dataLoaded = true;
@@ -1454,22 +1485,34 @@ function buildPresenceBtn(evId) {
 // PHASE 3: ACT RATINGS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function openRatingModal({ actId, actName, eventId, eventName }) {
+async function openRatingModal({ actId, actName, eventId, eventName }) {
   if (!ensureAuthenticated('Bewertungen')) return;
   ratingState = { actId, actName, eventId, eventName };
   selectedRating = 0;
 
-  const existing = userActRatings.get(`${actId}:${eventId}`);
+  const cacheKey = `${actId}:${eventId}`;
+  let existing = userActRatings.get(cacheKey);
+
+  // Fetch from DB if not already cached (e.g. opened directly from event card)
+  if (!existing && supabaseClient && sessionUser) {
+    try {
+      const { data } = await supabaseClient
+        .from('act_ratings')
+        .select('act_id, event_id, rating, was_best_act, was_surprise')
+        .eq('user_id', sessionUser.id)
+        .eq('act_id', actId)
+        .eq('event_id', eventId)
+        .maybeSingle();
+      if (data) { userActRatings.set(cacheKey, data); existing = data; }
+    } catch (_) {}
+  }
 
   document.getElementById('ratingActName').textContent = actName;
   document.getElementById('ratingEventName').textContent = eventName;
-  document.getElementById('ratingFlagBest').checked = existing?.was_best_act ?? false;
   document.getElementById('ratingFlagSurprise').checked = existing?.was_surprise ?? false;
   document.getElementById('ratingMessage').textContent = '';
 
-  if (existing) {
-    selectedRating = existing.rating;
-  }
+  selectedRating = existing?.rating ?? 0;
   updateRatingStars(selectedRating);
 
   const overlay = document.getElementById('ratingOverlay');
@@ -1505,7 +1548,6 @@ async function submitActRating() {
   if (msgEl) msgEl.textContent = 'Wird gespeichert...';
 
   const { actId, actName, eventId } = ratingState;
-  const wasBest = document.getElementById('ratingFlagBest')?.checked ?? false;
   const wasSurprise = document.getElementById('ratingFlagSurprise')?.checked ?? false;
 
   try {
@@ -1521,7 +1563,7 @@ async function submitActRating() {
     if (existingRow) {
       const { error } = await supabaseClient
         .from('act_ratings')
-        .update({ rating: selectedRating, was_best_act: wasBest, was_surprise: wasSurprise })
+        .update({ rating: selectedRating, was_best_act: false, was_surprise: wasSurprise })
         .eq('user_id', sessionUser.id)
         .eq('act_id', actId)
         .eq('event_id', eventId);
@@ -1529,13 +1571,21 @@ async function submitActRating() {
     } else {
       const { error } = await supabaseClient
         .from('act_ratings')
-        .insert({ user_id: sessionUser.id, act_id: actId, event_id: eventId, rating: selectedRating, was_best_act: wasBest, was_surprise: wasSurprise });
+        .insert({ user_id: sessionUser.id, act_id: actId, event_id: eventId, rating: selectedRating, was_best_act: false, was_surprise: wasSurprise });
       if (error) throw error;
     }
 
     // Update local cache
     const key = `${actId}:${eventId}`;
-    userActRatings.set(key, { act_id: actId, event_id: eventId, rating: selectedRating, was_best_act: wasBest, was_surprise: wasSurprise });
+    userActRatings.set(key, { act_id: actId, event_id: eventId, rating: selectedRating, was_best_act: false, was_surprise: wasSurprise });
+
+    // Refresh highlights and re-render the card in place
+    await loadEventHighlights();
+    const cardEl = document.querySelector(`.event-card[data-event-id="${eventId}"]`);
+    if (cardEl) {
+      const ev = allEvents.find(e => Number(e.id) === Number(eventId));
+      if (ev) cardEl.outerHTML = renderEventCard(ev, getNextActIds(allEvents));
+    }
 
     if (msgEl) msgEl.textContent = 'Gespeichert!';
     setTimeout(() => {

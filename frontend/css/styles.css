@@ -354,12 +354,24 @@ body::before {
 }
 
 .artist-name {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.artist-flairs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.artist-row-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .artist-time {
@@ -657,6 +669,9 @@ main {
 
 /* Clickable artist name in row */
 .artist-name-link {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   cursor: pointer;
   transition: color 0.15s;
   position: relative;
@@ -1151,6 +1166,29 @@ button.venue-tag.active {
   border-color: var(--red-dim);
   color: var(--red);
   background: rgba(255, 32, 32, 0.06);
+}
+
+.act-flair {
+  display: inline-flex;
+  align-items: center;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  padding: 2px 5px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.act-flair--best {
+  background: rgba(255, 200, 0, 0.10);
+  border: 1px solid rgba(255, 200, 0, 0.30);
+  color: rgba(255, 210, 40, 0.9);
+}
+.act-flair--surprise {
+  background: rgba(140, 60, 255, 0.10);
+  border: 1px solid rgba(140, 60, 255, 0.35);
+  color: rgba(160, 90, 255, 0.95);
 }
 
 .act-follow-btn {
