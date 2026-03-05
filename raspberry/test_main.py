@@ -2,7 +2,7 @@
 Test-Version von main.py:
 - Kein Startup-Delay
 - Kein Schlafzeit-Check
-- Läuft nur 5 Minuten
+- Genau 2 Mini-Sessions (6-14 Shots), dann post_process + Ende
 """
 import time
 import random
@@ -17,7 +17,7 @@ import uiautomator2 as u2
 from bot.human import HumanBehavior
 from bot.vision import StoryVision
 from bot.stories import StoryCapture
-from main import start_instagram_fresh
+from main import start_instagram_fresh, check_stories_with_retry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +30,11 @@ with open("config.yaml") as f:
     cfg = yaml.safe_load(f)
 cfg["DRIVE_FOLDER_ID"] = os.getenv("DRIVE_FOLDER_ID", "")
 
-TEST_DURATION = 5 * 60  # 5 Minuten
+TEST_SESSIONS  = 2
+SHOTS_MIN      = 6
+SHOTS_MAX      = 14
+PAUSE_MIN      = 20
+PAUSE_MAX      = 30
 
 device  = u2.connect()
 device.screen_on()
@@ -38,48 +42,52 @@ human   = HumanBehavior(device, cfg)
 vision  = StoryVision()
 stories = StoryCapture(device, vision, human, cfg)
 
-b = cfg["behavior"]
-shots_min = b.get("mini_session_shots_min", 5)
-shots_max = b.get("mini_session_shots_max", 10)
-pause_min = b.get("mini_session_pause_min", 20)
-pause_max = b.get("mini_session_pause_max", 60)
-
 if not start_instagram_fresh(device, log):
     exit(1)
 
-start          = time.time()
 total          = 0
-n              = 0
-need_scroll_up = False  # True nachdem Feed runtergescrollt wurde
+need_scroll_up = False
 
-while time.time() - start < TEST_DURATION:
-    remaining = (TEST_DURATION - (time.time() - start)) / 60
-    log.info(f"[{remaining:.1f} Min übrig] {total} Shots")
+for n in range(1, TEST_SESSIONS + 1):
+    log.info(f"=== Test-Session {n}/{TEST_SESSIONS} ===")
 
-    # Nur hochscrollen wenn wir vorher den Feed runtergescrollt haben
+    # Nach oben + aktualisieren (beim ersten Mal nur refresh, danach scroll+refresh)
     if need_scroll_up:
         human.scroll_to_top_and_refresh()
         need_scroll_up = False
     else:
         human.pull_to_refresh()
 
+    # Stories checken – mit zweistufigem Retry wie in main.py
     img = vision.screenshot_to_numpy(device)
     if img is None or not vision.has_unseen_stories(img):
-        log.info("Keine Stories – schließe Instagram und beende Test")
-        device.app_stop("com.instagram.android")
-        break
+        if not check_stories_with_retry(device, vision, human, log):
+            device.app_stop("com.instagram.android")
+            log.info("Keine Stories gefunden – breche Test ab")
+            break
+        img = vision.screenshot_to_numpy(device)
 
-    shots = random.randint(shots_min, shots_max)
+    shots = random.randint(SHOTS_MIN, SHOTS_MAX)
+    log.info(f"Session {n}: max {shots} Shots")
     count = stories.run_mini_session(max_shots=shots)
     total += count
-    n     += 1
-    log.info(f"Mini-Session #{n}: {count} Shots (gesamt {total})")
+    log.info(f"Session {n}: {count} Shots (gesamt {total})")
 
-    if random.random() < 0.75:
+    # Pause + Feed-Scroll zwischen Sessions (nicht nach der letzten)
+    if n < TEST_SESSIONS:
         human.scroll_feed_light()
         need_scroll_up = True
+        pause = random.uniform(PAUSE_MIN, PAUSE_MAX)
+        log.info(f"Pause {pause:.0f}s...")
+        time.sleep(pause)
 
-    time.sleep(random.uniform(pause_min, pause_max))
-
-log.info(f"=== Test fertig: {total} Shots in {n} Mini-Sessions ===")
+log.info(f"=== Test fertig: {total} Shots in {min(n, TEST_SESSIONS)} Sessions ===")
 device.screen_off()
+
+# Post-Processing wie in main.py
+log.info("Starte post_process.py...")
+try:
+    import post_process
+    post_process.main()
+except Exception as e:
+    log.error(f"post_process fehlgeschlagen: {e}", exc_info=True)
