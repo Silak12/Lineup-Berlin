@@ -16,18 +16,18 @@ behavior:
 
   # Zufälliger Delay nach Crontab-Start (Minuten) – macht Login-Rhythmus unregelmäßig
   startup_delay_min: 0
-  startup_delay_max: 25
+  startup_delay_max: 10
 
   # Wie lange pro Stunde gescrapt wird (nach dem Delay, Minuten)
-  scrape_duration_min: 25
+  scrape_duration_min: 45
 
   # Mini-Session: zufällige Anzahl Screenshots pro Durchgang
-  mini_session_shots_min: 5
-  mini_session_shots_max: 10
+  mini_session_shots_min: 8
+  mini_session_shots_max: 15
 
   # Pause zwischen Mini-Sessions (Sekunden)
-  mini_session_pause_min: 20
-  mini_session_pause_max: 60
+  mini_session_pause_min: 10
+  mini_session_pause_max: 30
 
   # Nach wie vielen Mini-Sessions Instagram neu gestartet wird (Sicherheits-Reset)
   restart_every_sessions: 4

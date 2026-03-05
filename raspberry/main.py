@@ -89,6 +89,37 @@ def start_instagram_fresh(device, log):
     return True
 
 
+def check_stories_with_retry(device, vision, human, log):
+    """
+    Prüft ob Stories vorhanden sind – mit zweistufigem Retry:
+    1. Pull-to-Refresh + 7s warten → nochmal checken
+    2. Instagram neu starten + kurz warten → nochmal checken
+    Gibt True zurück wenn Stories gefunden, False wenn definitiv keine da.
+    """
+    # Stufe 1: Refresh und nochmal warten
+    log.info("Keine Stories – Pull-to-Refresh und nochmal prüfen...")
+    human.pull_to_refresh()
+    time.sleep(7)
+    img = vision.screenshot_to_numpy(device)
+    if img is not None and vision.has_unseen_stories(img):
+        log.info("Stories nach Refresh gefunden!")
+        return True
+
+    # Stufe 2: Instagram komplett neu starten
+    log.info("Immer noch keine Stories – starte Instagram neu...")
+    device.app_stop("com.instagram.android")
+    time.sleep(3)
+    device.app_start("com.instagram.android")
+    time.sleep(6)
+    img = vision.screenshot_to_numpy(device)
+    if img is not None and vision.has_unseen_stories(img):
+        log.info("Stories nach Neustart gefunden!")
+        return True
+
+    log.info("Definitiv keine Stories – beende Session")
+    return False
+
+
 def main():
     cfg = load_config()
     setup_logging(cfg)
@@ -160,9 +191,11 @@ def main():
 
             img = vision.screenshot_to_numpy(device)
             if img is None or not vision.has_unseen_stories(img):
-                log.info("Keine Stories – schließe Instagram und beende Session")
-                device.app_stop("com.instagram.android")
-                break
+                if not check_stories_with_retry(device, vision, human, log):
+                    device.app_stop("com.instagram.android")
+                    break
+                # Nach erfolgreichem Retry: Bild neu holen
+                img = vision.screenshot_to_numpy(device)
 
             shots = random.randint(shots_min, shots_max)
             log.info(f"Mini-Session #{mini_sessions + 1}: max {shots} Shots")
@@ -202,13 +235,13 @@ def main():
     device.screen_off()
 
     # ── Post-Processing: dedup + Drive-Upload ────────────────────────────────
-    if total_captured > 0:
-        log.info("Starte post_process.py...")
-        try:
-            import post_process
-            post_process.main()
-        except Exception as e:
-            log.error(f"post_process fehlgeschlagen: {e}", exc_info=True)
+    # Immer aufrufen – auch wenn 0 neue Shots (könnten noch alte Dateien liegen)
+    log.info("Starte post_process.py...")
+    try:
+        import post_process
+        post_process.main()
+    except Exception as e:
+        log.error(f"post_process fehlgeschlagen: {e}", exc_info=True)
 
 
 if __name__ == "__main__":
